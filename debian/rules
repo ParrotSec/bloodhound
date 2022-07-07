@@ -1,0 +1,31 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/architecture.mk
+export HOME=$(CURDIR)/debian/fakehomenpm
+
+ifeq ($(DEB_HOST_ARCH),amd64)
+       TO_INSTALL := BloodHound-linux-x64
+else ifeq ($(DEB_HOST_ARCH),arm64)
+       TO_INSTALL := BloodHound-linux-arm64
+else ifeq ($(DEB_HOST_ARCH),armhf)
+       TO_INSTALL := BloodHound-linux-armv7l
+else
+       $(error 'unsupported architecture')
+endif
+
+export TO_INSTALL
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	npm install electron-packager
+	npm install
+	npm run linuxbuild
+
+override_dh_install:
+	dh_install -Xfakehomenpm
+
+#override_dh_dwz:
+
+#override_dh_shlibdeps:

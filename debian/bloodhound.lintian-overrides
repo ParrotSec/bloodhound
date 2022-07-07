@@ -1,0 +1,20 @@
+embedded-library usr/lib/bloodhound/BloodHound: *
+missing-dep-for-interpreter *
+package-contains-eslint-config-file *
+package-contains-npm-ignore-file *
+duplicate-font-file *
+embedded-javascript-library *
+package-contains-vcs-control-file *
+script-not-executable *
+unusual-interpreter *
+extra-license-file usr/lib/bloodhound/*
+font-in-non-font-package usr/lib/bloodhound/resources/*
+font-outside-font-dir usr/lib/bloodhound/resources/*
+hardening-no-fortify-functions usr/lib/bloodhound/*
+package-contains-documentation-outside-usr-share-doc usr/lib/bloodhound/*
+spelling-error-in-binary usr/lib/bloodhound/BloodHound *
+spelling-error-in-binary usr/lib/bloodhound/libGLESv2.so *
+spelling-error-in-binary usr/lib/bloodhound/libffmpeg.so *
+spelling-error-in-binary usr/lib/bloodhound/libvk_swiftshader.so *
+spelling-error-in-binary usr/lib/bloodhound/swiftshader/libGLESv2.so *
+privacy-breach-uses-embedded-file usr/lib/bloodhound/resources/app/node_modules/linkurious/plugins/list.html *

@@ -1,0 +1,20 @@
+bloodhound for Kali
+--------------------
+
+To get started with Bloodhound:
+
+1. Start the neo4j server: sudo neo4j console
+2. In a browser, open http://localhost:7474/
+3. Connect to database (default password is neo4j)
+4. Set up new password
+5. Start BloodHound in a other console: bloohound
+6. Authenticate to BlooHound at bolt://localhost:7687
+
+
+We don't provide an example database. You can download it:
+https://github.com/BloodHoundAD/BloodHound
+
+For more informations see :
+https://github.com/BloodHoundAD/BloodHound/wiki/Getting-started
+
+ -- Sophie Brun <sophie@offensive-security.com>  Fri, 21 May 2021 14:20:56 +0200
