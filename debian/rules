@@ -1,31 +1,22 @@
 #!/usr/bin/make -f
 
-include /usr/share/dpkg/architecture.mk
-export HOME=$(CURDIR)/debian/fakehomenpm
+include /usr/share/dpkg/pkg-info.mk
 
-ifeq ($(DEB_HOST_ARCH),amd64)
-       TO_INSTALL := BloodHound-linux-x64
-else ifeq ($(DEB_HOST_ARCH),arm64)
-       TO_INSTALL := BloodHound-linux-arm64
-else ifeq ($(DEB_HOST_ARCH),armhf)
-       TO_INSTALL := BloodHound-linux-armv7l
-else
-       $(error 'unsupported architecture')
-endif
+export DH_VERBOSE=1
+export HOME=$(CURDIR)/debian/fakehome
+export DH_GOLANG_BUILDPKG=github.com/specterops/bloodhound
 
-export TO_INSTALL
-
+# Use the "dh" sequencer
 %:
-	dh $@
+	dh $@ --buildsystem=golang --with=golang --builddirectory=build
 
 override_dh_auto_build:
-	npm install electron-packager
-	npm install
-	npm run linuxbuild
+	go run github.com/specterops/bloodhound/packages/go/stbernard deps
+	go run github.com/specterops/bloodhound/packages/go/stbernard build
 
-override_dh_install:
-	dh_install -Xfakehomenpm
+execute_after_dh_install:
+	rm -rf debian/bloodhound/usr/share/gocode
 
-#override_dh_dwz:
-
-#override_dh_shlibdeps:
+override_dh_auto_test:
+override_dh_shlibdeps:
+override_dh_golang:

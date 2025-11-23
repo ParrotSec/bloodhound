@@ -1,1 +1,0 @@
-extend-diff-ignore=BloodHound-linux-(?:arm64|x64|armv7l)/resources/app/node_modules/chain-function/(?:\.npmignore|index\.js|test\.js)

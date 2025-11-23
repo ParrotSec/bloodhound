@@ -1,6 +1,0 @@
-#!/bin/sh
-
-set -e
-
-cd /usr/lib/bloodhound
-exec ./BloodHound --no-sandbox "$@"

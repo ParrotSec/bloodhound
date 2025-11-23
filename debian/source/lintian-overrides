@@ -1,3 +1,0 @@
-source-is-missing docs/_build/html/_static/*
-source-is-missing src/js/*
-source-contains-prebuilt-windows-binary Collectors/*
