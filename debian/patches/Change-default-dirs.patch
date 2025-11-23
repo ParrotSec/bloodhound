@@ -1,0 +1,22 @@
+From: Sophie Brun <sophie@kali.org>
+Date: Fri, 29 Nov 2024 11:18:00 +0100
+Subject: Change default work dir and logs
+
+Default work dir was in /opt, change it to /var/lib
+---
+ cmd/api/src/config/default.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cmd/api/src/config/default.go b/cmd/api/src/config/default.go
+index 8ab68fc..c1a9e46 100644
+--- a/cmd/api/src/config/default.go
++++ b/cmd/api/src/config/default.go
+@@ -41,7 +41,7 @@ func NewDefaultConfiguration() (Configuration, error) {
+ 			MaxAPICacheSize:                 200, // Number of cache items for API utilities
+ 			MetricsPort:                     ":2112",
+ 			RootURL:                         serde.MustParseURL("http://localhost"),
+-			WorkDir:                         "/opt/bhe/work",
++			WorkDir:                         "/var/lib/bhe/work",
+ 			LogLevel:                        "INFO",
+ 			CollectorsBasePath:              "/etc/bloodhound/collectors",
+ 			CollectorsBucketURL:             serde.MustParseURL("https://bhe-hound-artifacts.s3.amazonaws.com/"),

@@ -1,0 +1,21 @@
+From: Sophie Brun <sophie@kali.org>
+Date: Thu, 27 Feb 2025 15:58:56 +0100
+Subject: Add port to HTTP address
+
+---
+ cmd/api/src/config/default.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cmd/api/src/config/default.go b/cmd/api/src/config/default.go
+index c1a9e46..ede2830 100644
+--- a/cmd/api/src/config/default.go
++++ b/cmd/api/src/config/default.go
+@@ -35,7 +35,7 @@ func NewDefaultConfiguration() (Configuration, error) {
+ 	} else {
+ 		return Configuration{
+ 			Version:                         0,
+-			BindAddress:                     "127.0.0.1",
++			BindAddress:                     "127.0.0.1:8080",
+ 			SlowQueryThreshold:              100, // Threshold in ms for caching queries
+ 			MaxGraphQueryCacheSize:          100, // Number of cache items for graph queries
+ 			MaxAPICacheSize:                 200, // Number of cache items for API utilities

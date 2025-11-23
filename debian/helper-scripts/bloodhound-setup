@@ -1,0 +1,43 @@
+#!/bin/sh
+
+set -e
+
+NEO4J_PORT=7474
+
+RESET='\033[0m'
+BOLD='\033[1m'
+UNDERLINE='\033[1;4m'
+RED='\033[1;31m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
+
+if [ `id -u` -ne 0 ]; then
+    sudo $0
+    exit 0
+fi
+
+echo "\n ${YELLOW}[*]${RESET} Starting PostgreSQL service"
+
+systemctl start postgresql
+if ! systemctl is-active --quiet postgresql; then
+    echo "ERROR: PostgreSQL failed to start" 1>&2
+    systemctl --no-pager -l status postgresql
+    exit 1
+fi
+
+echo "\n ${YELLOW}[*]${RESET} Creating Database"
+
+runuser -u postgres -- /usr/share/bloodhound/create-database-bloodhound
+
+echo "\n ${YELLOW}[*]${RESET} Starting neo4j"
+if ! neo4j status; then
+    neo4j start
+fi
+
+echo "\n ${GREEN}[i]${RESET} ${BOLD}You need to change the default password for neo4j${RESET}"
+echo "     Default credentials are ${UNDERLINE}user:neo4j${RESET} ${UNDERLINE}password:neo4j${RESET}"
+echo "\n ${RED}[!] IMPORTANT:${RESET} Once you have setup the new password, please update ${GREEN}/etc/bhapi/bhapi.json${RESET} with the new password before running bloodhound"
+
+until curl -s "http://localhost:${NEO4J_PORT}/" >/dev/null; do printf ...; sleep .5; done
+echo "\n opening ${YELLOW}${UNDERLINE}http://localhost:${NEO4J_PORT}/${RESET}"
+xdg-open "http://localhost:${NEO4J_PORT}/"

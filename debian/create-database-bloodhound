@@ -1,0 +1,31 @@
+#!/bin/sh
+
+check_user(){
+    psql \
+        --quiet \
+        --tuples-only \
+        --no-align \
+        -c "SELECT 1 FROM pg_roles WHERE rolname='$1'" \
+        postgres
+}
+
+sql=$(check_user _bloodhound)
+if [ "${sql}" = "1" ]; then
+    echo "User _bloodhound already exists in PostgreSQL"
+else
+    ## Create database user
+    echo "\n Creating database user"
+    createuser -DRS _bloodhound
+fi
+
+## Check if DB exists
+if [ $(psql --quiet --tuples-only --no-align --list | awk -F '|' '/bloodhound/{print $1}') ]; then
+    echo "Database bloodhound already exists in PostgreSQL"
+else
+    ## Create database
+    echo "\n Creating database"
+    createdb -O _bloodhound bloodhound
+fi
+
+psql -c "alter user _bloodhound with password 'bloodhound'" bloodhound
+

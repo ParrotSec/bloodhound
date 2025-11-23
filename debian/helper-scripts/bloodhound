@@ -1,6 +1,54 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 
-cd /usr/lib/bloodhound
-exec ./BloodHound --no-sandbox "$@"
+PORT=8080
+URL="http://127.0.0.1:${PORT}"
+NEO4J_PORT=7474
+
+RESET='\033[0m'
+UNDERLINE='\033[4m'
+RED='\033[1;31m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
+
+if [ `id -u` -ne 0 ]; then
+    sudo $0
+    exit 0
+fi
+
+if grep -q '"secret": "neo4j"' /etc/bhapi/bhapi.json; then
+    echo -e "\n It seems it's the first time you run bloodhound"
+    echo -e "\n Please run ${GREEN}bloodhound-setup${RESET} first"
+    echo
+    read -p "Do you want to run bloodhound-setup now? [Y/n] " confirm
+    case $confirm in Y | y | "")
+      exec bloodhound-setup
+      ;;
+    esac
+    exit 0
+fi
+
+systemctl start postgresql
+if ! systemctl is-active --quiet postgresql; then
+    echo "ERROR: PostgreSQL failed to start" 1>&2
+    systemctl --no-pager -l status postgresql
+    exit 1
+fi
+
+## Start NEO4J
+echo -e "\n Starting neo4j"
+if ! neo4j status; then
+    neo4j start
+fi
+until curl "http://localhost:${NEO4J_PORT}/" &>/dev/null; do printf ...; sleep .5; done
+
+## Start Bloodhound
+echo -e "\n Bloodhound will start"
+echo -e "\n IMPORTANT: It will take time, please wait...\n"
+
+cd /usr/lib/bloodhound/bin && runuser -u _bloodhound -- ./bhapi &
+
+until curl $URL &>/dev/null; do sleep 1; done
+echo -e "\n opening ${YELLOW}${UNDERLINE}${URL}${RESET}"
+xdg-open $URL

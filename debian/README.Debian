@@ -1,20 +1,33 @@
 bloodhound for Kali
 --------------------
 
-To get started with Bloodhound:
+To get started with Bloodhound
 
-1. Start the neo4j server: sudo neo4j console
-2. In a browser, open http://localhost:7474/
-3. Connect to database (default password is neo4j)
-4. Set up new password
-5. Start BloodHound in a other console: bloohound
-6. Authenticate to BlooHound at bolt://localhost:7687
+1. Run `sudo bloodhound-setup`. After the database creation, a browser
+   will be opened on http://localhost:7474/
+   (only required the first time)
 
+2. Connect to database (default password is neo4j), change the default
+   password and update the neo4j password in /etc/bhapi/bhapi.json:
+   The line    "secret": "neo4j"   must be updated
+   (only required the first time)
 
-We don't provide an example database. You can download it:
-https://github.com/BloodHoundAD/BloodHound
+3. Run `sudo bloohound`
 
-For more informations see :
-https://github.com/BloodHoundAD/BloodHound/wiki/Getting-started
+4. Wait! the server takes few minutes to start entirely. If you try to
+   connect to early, it will fail.
 
- -- Sophie Brun <sophie@offensive-security.com>  Fri, 21 May 2021 14:20:56 +0200
+5. Authenticate to BlooHound at http://localhost:8080
+   Default user is `admin` with password `admin`.
+   The first time you connect, you will have to set up a new password for
+   the user admin when you connect for the first time.
+
+INFORMATION ABOUT DATA COLLECTORS
+The collectors SharpHound and AzureHound are available in Kali as
+packages: sharphound and azurehound.
+You can also download them here:
+https://github.com/SpecterOps/SharpHound/releases
+https://github.com/SpecterOps/AzureHound/releases
+
+ -- Sophie Brun <sophie@kali.org>  Wed, 26 Feb 2025 15:59:18 +0100
+

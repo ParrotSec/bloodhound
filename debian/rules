@@ -1,31 +1,36 @@
 #!/usr/bin/make -f
 
-include /usr/share/dpkg/architecture.mk
-export HOME=$(CURDIR)/debian/fakehomenpm
+include /usr/share/dpkg/pkg-info.mk
 
-ifeq ($(DEB_HOST_ARCH),amd64)
-       TO_INSTALL := BloodHound-linux-x64
-else ifeq ($(DEB_HOST_ARCH),arm64)
-       TO_INSTALL := BloodHound-linux-arm64
-else ifeq ($(DEB_HOST_ARCH),armhf)
-       TO_INSTALL := BloodHound-linux-armv7l
-else
-       $(error 'unsupported architecture')
-endif
-
-export TO_INSTALL
+# output every command that modifies files on the build system.
+export DH_VERBOSE = 1
+export HOME=$(CURDIR)/debian/fakehome
+export SB_VERSION=$(DEB_VERSION_UPSTREAM)
+export SB_YARN_CMD=yarnpkg
+export DH_GOLANG_BUILDPKG=github.com/specterops/bloodhound
 
 %:
-	dh $@
+	dh $@ --buildsystem=golang --with=golang --builddirectory=_build
+
+execute_before_dh_auto_configure:
+	mkdir -p $(HOME)
 
 override_dh_auto_build:
-	npm install electron-packager
-	npm install
-	npm run linuxbuild
+	# build ui
+	yarnpkg config set --home enableTelemetry 0
+	go run github.com/specterops/bloodhound/packages/go/stbernard deps
+	# build gui, install go deps
+	go run github.com/specterops/bloodhound/packages/go/stbernard build
 
-override_dh_install:
-	dh_install -Xfakehomenpm
+execute_after_dh_install:
+	rm -rf $(CURDIR)/debian/bloodhound/usr/share/gocode
+	rm -rf $(CURDIR)/debian/bloodhound/usr/lib/bloodhound/cmd/ui/node_modules
+	rm $(CURDIR)/debian/bloodhound/usr/lib/bloodhound/cmd/ui/.eslintrc.cjs
 
-#override_dh_dwz:
+override_dh_auto_test:
 
-#override_dh_shlibdeps:
+override_dh_strip:
+
+override_dh_shlibdeps:
+
+override_dh_golang:

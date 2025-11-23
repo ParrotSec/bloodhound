@@ -1,3 +1,5 @@
-#!/usr/bin/dh-exec
+debian/create-database-bloodhound usr/share/bloodhound
 debian/helper-scripts/* usr/bin
-${TO_INSTALL}/* usr/lib/bloodhound
+debian/bhapi.json /etc/bhapi
+beagle cmd local-harnesses usr/lib/bloodhound
+dist/* usr/lib/bloodhound/bin

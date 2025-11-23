@@ -1,0 +1,21 @@
+From: Sophie Brun <sophie@kali.org>
+Date: Mon, 25 Nov 2024 15:24:38 +0100
+Subject: Add option to vite
+
+---
+ cmd/ui/package.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cmd/ui/package.json b/cmd/ui/package.json
+index b36f35e..e01b2a1 100644
+--- a/cmd/ui/package.json
++++ b/cmd/ui/package.json
+@@ -7,7 +7,7 @@
+         "debug": "vite --debug",
+         "dev": "vite",
+         "start": "vite",
+-        "build": "yarnpkg check-types && vite build",
++        "build": "yarnpkg check-types && vite build --emptyOutDir",
+         "preview": "vite preview",
+         "test": "TZ=America/Los_Angeles vitest",
+         "check-types": "yarnpkg workspaces foreach -ptRv --include '{bh-shared-ui,js-client-library}' run build && tsc --noEmit --pretty",

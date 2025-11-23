@@ -1,0 +1,6 @@
+usr/lib/bloodhound/bin
+etc/bloodhound
+etc/bhapi
+var/log/bloodhound
+var/lib/bhe
+var/lib/bloodhound

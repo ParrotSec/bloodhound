@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent group _bloodhound >/dev/null; then
+        addgroup --quiet --force-badname --system _bloodhound
+    fi
+
+    if ! getent passwd _bloodhound >/dev/null; then
+        adduser --quiet --force-badname --system --ingroup _bloodhound --home /var/lib/bloodhound --no-create-home _bloodhound
+    fi
+    chown -R _bloodhound:_bloodhound /var/lib/bloodhound
+    chown -R _bloodhound:_bloodhound /var/log/bloodhound
+    chown -R _bloodhound:_bloodhound /var/lib/bhe
+    chown -R _bloodhound:_bloodhound /etc/bloodhound
+fi
+
+
+#DEBHELPER#
+
+exit 0

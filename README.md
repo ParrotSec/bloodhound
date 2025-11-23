@@ -1,52 +1,53 @@
-[![Build](https://github.com/BloodHoundAD/BloodHound/actions/workflows/build.yml/badge.svg)](https://github.com/BloodHoundAD/BloodHound/actions/workflows/build.yml)
-[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/BloodHoundAD/BloodHound)](https://github.com/BloodHoundAD/BloodHound/releases/latest)
-![GitHub all releases](https://img.shields.io/github/downloads/BloodHoundAD/BloodHound/total)
+<p align="center">
+    <picture>
+        <img src="cmd/ui/public/img/BHCE_Vertical_RedField.svg" alt="BloodHound Community Edition" width='400' />
+    </picture>
+</p>
 
+<hr />
 
-# Getting Started with BloodHound
+BloodHound is a monolithic web application composed of an embedded React frontend with [Sigma.js](https://www.sigmajs.org/) and a [Go](https://go.dev/) based REST API backend. It is deployed with a [Postgresql](https://www.postgresql.org/) application database and a [Neo4j](https://neo4j.com/) graph database, and is fed by the [SharpHound](https://github.com/SpecterOps/SharpHound) and [AzureHound](https://github.com/SpecterOps/AzureHound) data collectors.
 
-To get started with BloodHound, check out the [BloodHound docs.](https://bloodhound.readthedocs.io/en/latest/index.html)
+BloodHound leverages graph theory to reveal hidden and often unintended relationships across identity and access management systems. Powered by [OpenGraph](https://specterops.io/opengraph/?utm_campaign=Direct_DemoRequest_2025_09_01_GitHub&utm_medium=DemoRequest&utm_source=Direct&Latest_Campaign=701Uw00000X36PF), BloodHound now supports comprehensive analysis beyond Active Directory and Azure environments, enabling users to map complex privilege relationships across [diverse identity platforms](https://bloodhound.specterops.io/opengraph/library). Attackers can utilize BloodHound to rapidly discover sophisticated attack paths otherwise impossible to identify manually, while defenders can proactively identify and mitigate these risks. Both red and blue teams benefit from BloodHound's expanded capabilities, gaining deeper insights into identity and privilege structures across their entire security landscape.
 
-# About BloodHound
+BloodHound CE is created and maintained by the [SpecterOps](https://specterops.io/?utm_campaign=Direct_DemoRequest_2025_09_01_GitHub&utm_medium=DemoRequest&utm_source=Direct&Latest_Campaign=701Uw00000X36PF) team who also brought you [BloodHound Enterprise](https://specterops.io/bloodhound-overview/?utm_campaign=Direct_DemoRequest_2025_09_01_GitHub&utm_medium=DemoRequest&utm_source=Direct&Latest_Campaign=701Uw00000X36PF). The original BloodHound was created by [@\_wald0](https://www.twitter.com/_wald0), [@CptJesus](https://twitter.com/CptJesus), and [@harmj0y](https://twitter.com/harmj0y).
 
-BloodHound is a single page Javascript web application, built on top of [Linkurious](http://linkurio.us/), compiled with [Electron](http://electron.atom.io/), with a [Neo4j](https://neo4j.com/) database fed by a C# data collector.
+## Running BloodHound Community Edition
+Please refer to the [Quickstart Guide for BloodHound Community Edition](https://bloodhound.specterops.io/get-started/quickstart/community-edition-quickstart), which is part of the [BloodHound documentation](https://bloodhound.specterops.io).
 
-BloodHound uses graph theory to reveal the hidden and often unintended relationships within an Active Directory or Azure environment. Attackers can use BloodHound to easily identify highly complex attack paths that would otherwise be impossible to quickly identify. Defenders can use BloodHound to identify and eliminate those same attack paths. Both blue and red teams can use BloodHound to easily gain a deeper understanding of privilege relationships in an Active Directory or Azure environment.
+## Useful Links
 
-BloodHound was created by [@_wald0](https://www.twitter.com/_wald0), [@CptJesus](https://twitter.com/CptJesus), and [@harmj0y](https://twitter.com/harmj0y).
+- [BloodHound Documentation](https://bloodhound.specterops.io/)
+- [BloodHound Community Edition Quickstart Guide](https://bloodhound.specterops.io/get-started/quickstart/community-edition-quickstart)
+- [BloodHound Slack](https://slack.specterops.io)
+- [OpenGraph Documentation](https://bloodhound.specterops.io/opengraph/overview)
+- [Wiki](https://github.com/SpecterOps/BloodHound/wiki)
+- [Docker Compose Example](./examples/docker-compose/README.md)
+- [Developer Quick Start Guide](https://github.com/SpecterOps/BloodHound/wiki/Development)
+- [Contributing Guide](https://github.com/SpecterOps/BloodHound/wiki/Contributing)
+- [Contributors](./CONTRIBUTORS.md)
 
-BloodHound is maintained by the [BloodHound Enterprise](https://bloodhoundenterprise.io/) team.
+## Contact
 
-# About BloodHound Enterprise
+Please check out the [Contact page](https://github.com/SpecterOps/BloodHound/wiki/Contact) in our wiki for details on how to reach out with questions and suggestions.
 
-[BloodHound Enterprise](https://bloodhoundenterprise.io/) is an Attack Path Management solution that continuously maps and quantifies Active Directory Attack Paths. You can remove millions, even billions of Attack Paths within your existing architecture and eliminate the attacker’s easiest, most reliable, and most attractive techniques.
+## Licensing
 
-# Downloading BloodHound Binaries
-Pre-Compiled BloodHound binaries can be found [here](https://github.com/BloodHoundAD/BloodHound/releases). 
+```
+Copyright 2025 Specter Ops, Inc.
 
-The rolling release will always be updated to the most recent source. Tagged releases are considered "stable" but will likely not have new features or fixes.
+Licensed under the Apache License, Version 2.0
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-# Creating example data
+    http://www.apache.org/licenses/LICENSE-2.0
 
-A sample database generator can be found [here](https://github.com/BloodHoundAD/BloodHound-Tools/tree/master/DBCreator)
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
 
-You can create your own example Active Directory environment using [BadBlood](https://github.com/davidprowe/BadBlood).
-
-# License
-
-BloodHound uses graph theory to reveal hidden relationships and
-attack paths in an Active Directory environment.
-Copyright (C) 2016-2023 Specter Ops Inc.
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
+Unless otherwise annotated by a lower-level LICENSE file or license header, all files in this repository are released
+under the `Apache-2.0` license. A full copy of the license may be found in the top-level [LICENSE](LICENSE) file.

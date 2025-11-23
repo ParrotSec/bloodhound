@@ -1,0 +1,44 @@
+From: Sophie Brun <sophie@kali.org>
+Date: Thu, 31 Oct 2024 17:36:19 +0100
+Subject: Fix version
+
+---
+ packages/go/stbernard/workspace/golang/build.go | 15 ++++++---------
+ 1 file changed, 6 insertions(+), 9 deletions(-)
+
+diff --git a/packages/go/stbernard/workspace/golang/build.go b/packages/go/stbernard/workspace/golang/build.go
+index b7bf924..aa75bfd 100644
+--- a/packages/go/stbernard/workspace/golang/build.go
++++ b/packages/go/stbernard/workspace/golang/build.go
+@@ -28,25 +28,22 @@ import (
+ 	"github.com/Masterminds/semver/v3"
+ 	"github.com/specterops/bloodhound/packages/go/stbernard/cmdrunner"
+ 	"github.com/specterops/bloodhound/packages/go/stbernard/environment"
+-	"github.com/specterops/bloodhound/packages/go/stbernard/git"
+ )
+ 
+ // BuildMainPackages builds all main packages for the given module
+ func BuildMainPackages(workRoot string, modPath string, env environment.Environment) error {
+ 	var (
+-		err      error
+ 		version  semver.Version
+ 		buildDir = filepath.Join(workRoot, "dist") + string(filepath.Separator)
+ 	)
+ 
+-	if version, err = git.ParseLatestVersionFromTags(workRoot, env); err != nil {
+-		slog.Warn(fmt.Sprintf("Failed to parse version from git tags, falling back to environment variable: %v", err))
+-		parsedVersion, err := semver.NewVersion(env[environment.VersionVarName])
+-		if err != nil {
+-			return fmt.Errorf("error parsing version from environment variable: %w", err)
+-		}
+-		version = *parsedVersion
++//	if version, err = git.ParseLatestVersionFromTags(workRoot, env); err != nil {
++//		slog.Warn(fmt.Sprintf("Failed to parse version from git tags, falling back to environment variable: %v", err))
++	parsedVersion, err := semver.NewVersion(env[environment.VersionVarName])
++	if err != nil {
++		return fmt.Errorf("error parsing version from environment variable: %w", err)
+ 	}
++	version = *parsedVersion
+ 
+ 	slog.Info(fmt.Sprintf("Building for version %s", version.Original()))
+ 

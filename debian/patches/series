@@ -1,0 +1,6 @@
+Replace-yarn-with-yarnpkg.patch
+Fix-version.patch
+Add-option-to-vite.patch
+Change-default-dirs.patch
+Add-port-to-HTTP-address.patch
+Remove-Download-Collectors-page.patch
