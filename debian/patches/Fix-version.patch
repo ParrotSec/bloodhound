@@ -6,12 +6,13 @@ Subject: Fix version
  packages/go/stbernard/workspace/golang/build.go | 15 ++++++---------
  1 file changed, 6 insertions(+), 9 deletions(-)
 
-diff --git a/packages/go/stbernard/workspace/golang/build.go b/packages/go/stbernard/workspace/golang/build.go
-index b7bf924..aa75bfd 100644
 --- a/packages/go/stbernard/workspace/golang/build.go
 +++ b/packages/go/stbernard/workspace/golang/build.go
-@@ -28,25 +28,22 @@ import (
+@@ -26,28 +26,25 @@
+ 	"sync"
+ 
  	"github.com/Masterminds/semver/v3"
+-	"github.com/specterops/bloodhound/packages/go/bhlog/attr"
  	"github.com/specterops/bloodhound/packages/go/stbernard/cmdrunner"
  	"github.com/specterops/bloodhound/packages/go/stbernard/environment"
 -	"github.com/specterops/bloodhound/packages/go/stbernard/git"
@@ -26,19 +27,16 @@ index b7bf924..aa75bfd 100644
  	)
  
 -	if version, err = git.ParseLatestVersionFromTags(workRoot, env); err != nil {
--		slog.Warn(fmt.Sprintf("Failed to parse version from git tags, falling back to environment variable: %v", err))
--		parsedVersion, err := semver.NewVersion(env[environment.VersionVarName])
--		if err != nil {
--			return fmt.Errorf("error parsing version from environment variable: %w", err)
--		}
--		version = *parsedVersion
-+//	if version, err = git.ParseLatestVersionFromTags(workRoot, env); err != nil {
-+//		slog.Warn(fmt.Sprintf("Failed to parse version from git tags, falling back to environment variable: %v", err))
-+	parsedVersion, err := semver.NewVersion(env[environment.VersionVarName])
-+	if err != nil {
-+		return fmt.Errorf("error parsing version from environment variable: %w", err)
- 	}
-+	version = *parsedVersion
+-		slog.Warn("Failed to parse version from git tags, falling back to environment variable", attr.Error(err))
++	//if version, err = git.ParseLatestVersionFromTags(workRoot, env); err != nil {
++	//	slog.Warn("Failed to parse version from git tags, falling back to environment variable", attr.Error(err))
+ 		parsedVersion, err := semver.NewVersion(env[environment.VersionVarName])
+ 		if err != nil {
+ 			return fmt.Errorf("error parsing version from environment variable: %w", err)
+ 		}
+ 		version = *parsedVersion
+-	}
++	//}
  
- 	slog.Info(fmt.Sprintf("Building for version %s", version.Original()))
+ 	slog.Info("Building", slog.String("version", version.Original()))
  

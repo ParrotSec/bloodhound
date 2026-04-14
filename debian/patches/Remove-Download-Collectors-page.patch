@@ -9,36 +9,32 @@ Download Collectors
  cmd/ui/src/routes/constants.ts                     |   1 -
  cmd/ui/src/routes/index.ts                         |   7 -
  .../DownloadCollectors/DownloadCollectors.test.tsx | 227 ---------------------
- .../DownloadCollectors/DownloadCollectors.tsx      | 169 ---------------
+ .../DownloadCollectors/DownloadCollectors.tsx      | 168 ---------------
  cmd/ui/src/views/DownloadCollectors/index.ts       |  19 --
  .../src/components/DocumentationLinks.tsx          |  22 --
- 7 files changed, 451 deletions(-)
+ 7 files changed, 450 deletions(-)
  delete mode 100644 cmd/ui/src/views/DownloadCollectors/DownloadCollectors.test.tsx
  delete mode 100644 cmd/ui/src/views/DownloadCollectors/DownloadCollectors.tsx
  delete mode 100644 cmd/ui/src/views/DownloadCollectors/index.ts
 
-diff --git a/cmd/ui/src/components/MainNav/MainNavData.tsx b/cmd/ui/src/components/MainNav/MainNavData.tsx
-index 4c23a7a..bd8fb71 100644
 --- a/cmd/ui/src/components/MainNav/MainNavData.tsx
 +++ b/cmd/ui/src/components/MainNav/MainNavData.tsx
-@@ -111,12 +111,6 @@ export const useMainNavSecondaryListData = (): MainNavData['secondaryList'] => {
-             route: routes.ROUTE_MY_PROFILE,
+@@ -136,12 +136,6 @@
              testId: 'global_nav-my-profile',
          },
--        {
+         {
 -            label: 'Download Collectors',
 -            icon: <AppIcon.Download size={24} />,
 -            route: routes.ROUTE_DOWNLOAD_COLLECTORS,
 -            testId: 'global_nav-download-collectors',
 -        },
-         {
+-        {
              label: 'Administration',
              icon: <AppIcon.UserCog size={24} />,
-diff --git a/cmd/ui/src/routes/constants.ts b/cmd/ui/src/routes/constants.ts
-index f399f6f..c1759d4 100644
+             subNav: adminRoutes,
 --- a/cmd/ui/src/routes/constants.ts
 +++ b/cmd/ui/src/routes/constants.ts
-@@ -26,7 +26,6 @@ export const ROUTE_USER_DISABLED = '/user-disabled';
+@@ -27,7 +27,6 @@
  export const ROUTE_TWO_FACTOR_AUTHENTICATION = '/login-2fa';
  export const ROUTE_EXPIRED_PASSWORD = '/expired-password';
  export const ROUTE_MY_PROFILE = '/my-profile';
@@ -46,19 +42,17 @@ index f399f6f..c1759d4 100644
  export const ROUTE_ADMINISTRATION = '/administration/';
  export const ROUTE_ADMINISTRATION_ROOT = ROUTE_ADMINISTRATION + '*';
  export const ROUTE_ADMINISTRATION_FILE_INGEST = ROUTE_ADMINISTRATION + 'file-ingest';
-diff --git a/cmd/ui/src/routes/index.ts b/cmd/ui/src/routes/index.ts
-index dab0e5b..1044279 100644
 --- a/cmd/ui/src/routes/index.ts
 +++ b/cmd/ui/src/routes/index.ts
-@@ -25,7 +25,6 @@ const Home = React.lazy(() => import('src/views/Home/Home'));
+@@ -25,7 +25,6 @@
  const NotFound = React.lazy(() => import('src/views/NotFound'));
  const ExploreGraphView = React.lazy(() => import('src/views/Explore/GraphView'));
- const UserProfile = React.lazy(() => import('bh-shared-ui').then((module) => ({ default: module.UserProfile })));
+ const UserProfile = React.lazy(() => import('bh-shared-ui/UserProfile'));
 -const DownloadCollectors = React.lazy(() => import('src/views/DownloadCollectors'));
  const Administration = React.lazy(() => import('src/views/Administration'));
- const ApiExplorer = React.lazy(() => import('bh-shared-ui').then((module) => ({ default: module.ApiExplorer })));
+ const ApiExplorer = React.lazy(() => import('bh-shared-ui/ApiExplorer'));
  const GroupManagement = React.lazy(() => import('src/views/GroupManagement/GroupManagement'));
-@@ -81,12 +80,6 @@ export const ROUTES: Routable[] = [
+@@ -81,12 +80,6 @@
          authenticationRequired: true,
          navigation: true,
      },
@@ -71,9 +65,6 @@ index dab0e5b..1044279 100644
      {
          path: routes.ROUTE_ADMINISTRATION_ROOT,
          component: Administration,
-diff --git a/cmd/ui/src/views/DownloadCollectors/DownloadCollectors.test.tsx b/cmd/ui/src/views/DownloadCollectors/DownloadCollectors.test.tsx
-deleted file mode 100644
-index be3a081..0000000
 --- a/cmd/ui/src/views/DownloadCollectors/DownloadCollectors.test.tsx
 +++ /dev/null
 @@ -1,227 +0,0 @@
@@ -304,12 +295,9 @@ index be3a081..0000000
 -        ).toBeInTheDocument();
 -    });
 -});
-diff --git a/cmd/ui/src/views/DownloadCollectors/DownloadCollectors.tsx b/cmd/ui/src/views/DownloadCollectors/DownloadCollectors.tsx
-deleted file mode 100644
-index 2c473c0..0000000
 --- a/cmd/ui/src/views/DownloadCollectors/DownloadCollectors.tsx
 +++ /dev/null
-@@ -1,169 +0,0 @@
+@@ -1,168 +0,0 @@
 -// Copyright 2023 Specter Ops, Inc.
 -//
 -// Licensed under the Apache License, Version 2.0
@@ -326,18 +314,17 @@ index 2c473c0..0000000
 -//
 -// SPDX-License-Identifier: Apache-2.0
 -
--import { Alert, Box, Paper, Skeleton, Typography, useTheme } from '@mui/material';
+-import { Alert, Box, Paper, Skeleton, Typography } from '@mui/material';
 -import { CollectorCardList, DocumentationLinks, PageWithTitle, apiClient } from 'bh-shared-ui';
 -import { CommunityCollectorType } from 'js-client-library';
 -import fileDownload from 'js-file-download';
--import { useDispatch } from 'react-redux';
 -import { addSnackbar } from 'src/ducks/global/actions';
 -import { useGetCollectorsByType } from 'src/hooks/useCollectors';
+-import { useAppDispatch } from 'src/store';
 -
 -const DownloadCollectors = () => {
 -    /* Hooks */
--    const theme = useTheme();
--    const dispatch = useDispatch();
+-    const dispatch = useAppDispatch();
 -    const sharpHoundCollectorsQuery = useGetCollectorsByType('sharphound');
 -    const azureHoundCollectorsQuery = useGetCollectorsByType('azurehound');
 -
@@ -395,7 +382,7 @@ index 2c473c0..0000000
 -                    {DocumentationLinks.azureHoundCELink} collectors.
 -                </Typography>
 -            }>
--            <Box display='grid' gap={theme.spacing(4)}>
+-            <div className='grid gap-8'>
 -                {(sharpHoundCollectorsQuery.isError ||
 -                    azureHoundCollectorsQuery.isError ||
 -                    sharpHoundCollectorsQuery.data?.data.versions.length === 0) && (
@@ -473,15 +460,12 @@ index 2c473c0..0000000
 -                        />
 -                    )}
 -                </Box>
--            </Box>
+-            </div>
 -        </PageWithTitle>
 -    );
 -};
 -
 -export default DownloadCollectors;
-diff --git a/cmd/ui/src/views/DownloadCollectors/index.ts b/cmd/ui/src/views/DownloadCollectors/index.ts
-deleted file mode 100644
-index 8bd9f97..0000000
 --- a/cmd/ui/src/views/DownloadCollectors/index.ts
 +++ /dev/null
 @@ -1,19 +0,0 @@
@@ -504,8 +488,6 @@ index 8bd9f97..0000000
 -import DownloadCollectors from './DownloadCollectors';
 -
 -export default DownloadCollectors;
-diff --git a/packages/javascript/bh-shared-ui/src/components/DocumentationLinks.tsx b/packages/javascript/bh-shared-ui/src/components/DocumentationLinks.tsx
-index 040584d..270a397 100644
 --- a/packages/javascript/bh-shared-ui/src/components/DocumentationLinks.tsx
 +++ b/packages/javascript/bh-shared-ui/src/components/DocumentationLinks.tsx
 @@ -16,26 +16,6 @@
@@ -535,7 +517,7 @@ index 040584d..270a397 100644
  const samlConfigDocLink = (
      <Link
          target='_blank'
-@@ -77,8 +57,6 @@ const apiUsageLink = (
+@@ -77,8 +57,6 @@
  );
  
  export default {

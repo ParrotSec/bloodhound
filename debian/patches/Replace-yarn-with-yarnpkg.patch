@@ -8,9 +8,6 @@ In Debian the command yarn is named yarnpkg
  package.json                                 | 20 ++++++++++----------
  packages/go/stbernard/workspace/yarn/yarn.go |  8 ++++----
  3 files changed, 16 insertions(+), 16 deletions(-)
-
-diff --git a/cmd/ui/package.json b/cmd/ui/package.json
-index e061ece..b36f35e 100644
 --- a/cmd/ui/package.json
 +++ b/cmd/ui/package.json
 @@ -7,10 +7,10 @@
@@ -21,16 +18,23 @@ index e061ece..b36f35e 100644
 +        "build": "yarnpkg check-types && vite build",
          "preview": "vite preview",
          "test": "TZ=America/Los_Angeles vitest",
--        "check-types": "yarn workspaces foreach -ptRv --include '{bh-shared-ui,js-client-library}' run build && tsc --noEmit --pretty",
-+        "check-types": "yarnpkg workspaces foreach -ptRv --include '{bh-shared-ui,js-client-library}' run build && tsc --noEmit --pretty",
+-        "check-types": "yarn workspaces foreach -ptRv --include '{bh-shared-ui,js-client-library,doodle-ui}' run build && tsc --noEmit --pretty",
++        "check-types": "yarnpkg workspaces foreach -ptRv --include '{bh-shared-ui,js-client-library,doodle-ui}' run build && tsc --noEmit --pretty",
          "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
          "format": "prettier --write \"src/**/*.@(js|jsx|ts|tsx|md|html|css|scss|json)\"",
          "check-format": "prettier  --list-different \"src/**/*.@(js|jsx|ts|tsx|md|html|css|scss|json)\""
-diff --git a/package.json b/package.json
-index 4cfcf76..444b744 100644
+@@ -112,7 +112,7 @@
+         "vitest-canvas-mock": "^0.3.3",
+         "whatwg-fetch": "^3.6.2"
+     },
+-    "packageManager": "yarn@3.5.0",
++    "packageManager": "yarnpkg@3.5.0",
+     "msw": {
+         "workerDirectory": "public"
+     }
 --- a/package.json
 +++ b/package.json
-@@ -8,16 +8,16 @@
+@@ -8,18 +8,18 @@
      ]
    },
    "scripts": {
@@ -38,30 +42,31 @@ index 4cfcf76..444b744 100644
 -    "debug": "yarn workspace bloodhound-ui debug",
 -    "start": "yarn workspace bloodhound-ui start",
 -    "preview": "yarn workspace bloodhound-ui preview",
--    "build": "yarn workspaces foreach -ptv run build",
+-    "build": "yarn workspace bloodhound-ui build",
 -    "test": "yarn workspaces foreach -ptv run test run",
--    "check-types": "yarn workspaces foreach -ptv run check-types",
--    "lint": "yarn workspaces foreach -ptv run lint",
--    "format": "yarn workspaces foreach -ptv run format",
--    "check-format": "yarn workspaces foreach -ptv run check-format"
+-    "check-types": "yarn workspaces foreach --exclude eslint-plugin-sx-props -ptv run check-types",
+-    "lint": "yarn workspaces foreach --exclude eslint-plugin-sx-props -ptv run lint",
+-    "format": "yarn workspaces foreach --exclude eslint-plugin-sx-props -ptv run format",
+-    "check-format": "yarn workspaces foreach --exclude eslint-plugin-sx-props -ptv run check-format"
 +    "dev": "yarnpkg workspace bloodhound-ui dev",
 +    "debug": "yarnpkg workspace bloodhound-ui debug",
 +    "start": "yarnpkg workspace bloodhound-ui start",
 +    "preview": "yarnpkg workspace bloodhound-ui preview",
-+    "build": "yarnpkg workspaces foreach -ptv run build",
++    "build": "yarnpkg workspace bloodhound-ui build",
 +    "test": "yarnpkg workspaces foreach -ptv run test run",
-+    "check-types": "yarnpkg workspaces foreach -ptv run check-types",
-+    "lint": "yarnpkg workspaces foreach -ptv run lint",
-+    "format": "yarnpkg workspaces foreach -ptv run format",
-+    "check-format": "yarnpkg workspaces foreach -ptv run check-format"
++    "check-types": "yarnpkg workspaces foreach --exclude eslint-plugin-sx-props -ptv run check-types",
++    "lint": "yarnpkg workspaces foreach --exclude eslint-plugin-sx-props -ptv run lint",
++    "format": "yarnpkg workspaces foreach --exclude eslint-plugin-sx-props -ptv run format",
++    "check-format": "yarnpkg workspaces foreach --exclude eslint-plugin-sx-props -ptv run check-format"
    },
-   "packageManager": "yarn@3.5.1",
+-  "packageManager": "yarn@3.5.1",
++  "packageManager": "yarnpkg@3.5.1",
    "devDependencies": {
-diff --git a/packages/go/stbernard/workspace/yarn/yarn.go b/packages/go/stbernard/workspace/yarn/yarn.go
-index beceb86..da31e49 100644
+     "all-contributors-cli": "^6.26.1",
+     "prettier": "^3.2.5",
 --- a/packages/go/stbernard/workspace/yarn/yarn.go
 +++ b/packages/go/stbernard/workspace/yarn/yarn.go
-@@ -71,7 +71,7 @@ func InstallWorkspaceDeps(cwd string, jsPaths []string, env environment.Environm
+@@ -71,7 +71,7 @@
  			Env:     env.Slice(),
  		}
  		if _, err := cmdrunner.Run(context.TODO(), executionPlan); err != nil {
@@ -70,7 +75,7 @@ index beceb86..da31e49 100644
  		}
  	}
  
-@@ -92,7 +92,7 @@ func Format(cwd string, env environment.Environment) error {
+@@ -92,7 +92,7 @@
  		Env:     env.Slice(),
  	}
  	if _, err := cmdrunner.Run(context.TODO(), executionPlan); err != nil {
@@ -79,7 +84,7 @@ index beceb86..da31e49 100644
  	} else {
  		return nil
  	}
-@@ -112,7 +112,7 @@ func BuildWorkspace(cwd string, env environment.Environment) error {
+@@ -112,7 +112,7 @@
  		Env:     env.Slice(),
  	}
  	if _, err := cmdrunner.Run(context.TODO(), executionPlan); err != nil {
@@ -88,7 +93,7 @@ index beceb86..da31e49 100644
  	} else {
  		return nil
  	}
-@@ -132,7 +132,7 @@ func TestWorkspace(cwd string, env environment.Environment) error {
+@@ -132,7 +132,7 @@
  		Env:     env.Slice(),
  	}
  	if _, err := cmdrunner.Run(context.TODO(), executionPlan); err != nil {

@@ -6,11 +6,9 @@ Subject: Add port to HTTP address
  cmd/api/src/config/default.go | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/cmd/api/src/config/default.go b/cmd/api/src/config/default.go
-index c1a9e46..ede2830 100644
 --- a/cmd/api/src/config/default.go
 +++ b/cmd/api/src/config/default.go
-@@ -35,7 +35,7 @@ func NewDefaultConfiguration() (Configuration, error) {
+@@ -48,7 +48,7 @@
  	} else {
  		return Configuration{
  			Version:                         0,

@@ -1,3 +1,10 @@
+bloodhound (9.0.0-0parrot1) echo; urgency=medium
+
+  * disable pristine-tar branch
+  * New upstream version 9.0.0
+
+ -- Lorenzo "Palinuro" Faletra <palinuro@parrotsec.org>  Tue, 14 Apr 2026 14:20:42 +0200
+
 bloodhound (8.3.1-0parrot1) echo; urgency=medium
 
   * Import new upstream release.
