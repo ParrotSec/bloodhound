@@ -28,6 +28,7 @@ import (
 
 	"github.com/specterops/bloodhound/cmd/api/src/model"
 	"github.com/specterops/bloodhound/cmd/api/src/model/appcfg"
+	"github.com/specterops/bloodhound/cmd/api/src/services/graphify/endpoint"
 	"github.com/specterops/bloodhound/packages/go/bhlog/attr"
 	"github.com/specterops/bloodhound/packages/go/bhlog/measure"
 	"github.com/specterops/bloodhound/packages/go/bomenc"
@@ -49,17 +50,18 @@ func (s *GraphifyService) clearFileTask(ingestTask model.IngestTask) {
 }
 
 type IngestFileData struct {
-	Name       string
-	ParentFile string
-	Path       string
-	Errors     []string
+	Name         string
+	ParentFile   string
+	Path         string
+	Errors       []string
+	UserDataErrs []string
 }
 
 // extractIngestFiles will take a path and extract zips if necessary, returning the paths for files to process
 // along with any errors and the number of failed files (in the case of a zip archive)
 func (s *GraphifyService) extractIngestFiles(path string, providedFileName string, fileType model.FileType) ([]IngestFileData, error) {
 	if fileType == model.FileTypeJson {
-		//If this isn't a zip file, just return a slice with the path in it and let stuff process as normal
+		// If this isn't a zip file, just return a slice with the path in it and let stuff process as normal
 		return []IngestFileData{
 			{
 				Name:   providedFileName,
@@ -95,7 +97,7 @@ func (s *GraphifyService) extractIngestFiles(path string, providedFileName strin
 		}()
 
 		for _, f := range archive.File {
-			//skip directories
+			// skip directories
 			if f.FileInfo().IsDir() {
 				continue
 			}
@@ -174,16 +176,27 @@ func (s *GraphifyService) ProcessIngestFile(ic *IngestContext, task model.Ingest
 				readOpts := ReadOptions{
 					IngestSchema:       s.schema,
 					FileType:           task.FileType,
-					RegisterSourceKind: s.db.RegisterSourceKind(s.ctx),
+					RegisterSourceKind: s.RegisterSourceKind(s.ctx),
 				}
 
 				if err := processSingleFile(ic.Ctx, data, ic, readOpts); err != nil {
-					var graphifyError errorlist.Error
-					if ok := errors.As(err, &graphifyError); ok {
-						fileData[i].Errors = append(fileData[i].Errors, graphifyError.AsStrings()...)
+					var (
+						graphifyError errorlist.Error
+						resolutionErr endpoint.ResolutionError
+					)
+
+					if errors.As(err, &graphifyError) {
+						for _, graphifyErr := range graphifyError.Errors {
+							if ok := errors.As(graphifyErr, &resolutionErr); ok {
+								fileData[i].UserDataErrs = append(fileData[i].UserDataErrs, resolutionErr.Error())
+							} else {
+								fileData[i].Errors = append(fileData[i].Errors, graphifyErr.Error())
+							}
+						}
 					} else {
 						fileData[i].Errors = append(fileData[i].Errors, err.Error())
 					}
+
 					errs.Add(err) // graphifyErrorBuilder at fn scope
 					continue      // keep ingesting the rest
 				}
@@ -194,18 +207,25 @@ func (s *GraphifyService) ProcessIngestFile(ic *IngestContext, task model.Ingest
 	}
 }
 
-func (s *GraphifyService) NewIngestContext(ctx context.Context, ingestTime time.Time, useChangelog bool) *IngestContext {
-	opts := []IngestOption{WithIngestTime(ingestTime)}
+func (s *GraphifyService) NewIngestContext(ctx context.Context, ingestTime time.Time, useChangelog bool, jobId int64) *IngestContext {
+	opts := []IngestOption{
+		WithIngestTime(ingestTime),
+		WithEndpointResolver(s.endpointResolver),
+	}
 
 	if useChangelog {
 		opts = append(opts, WithChangeManager(s.changeManager))
+	}
+
+	if jobId > 0 {
+		opts = append(opts, WithJobId(jobId))
 	}
 
 	return NewIngestContext(ctx, opts...)
 }
 
 func processSingleFile(ctx context.Context, fileData IngestFileData, ingestContext *IngestContext, readOpts ReadOptions) error {
-	defer measure.ContextLogAndMeasure(ctx, slog.LevelDebug, "processing single file for ingest", slog.String("filepath", fileData.Path))()
+	defer measure.ContextLogAndMeasureWithThreshold(ctx, slog.LevelDebug, "processing single file for ingest", slog.String("filepath", fileData.Path))()
 
 	file, err := os.Open(fileData.Path)
 	if err != nil {
@@ -285,7 +305,7 @@ func (s *GraphifyService) ProcessTasks(updateJob UpdateJobFunc) {
 	}
 
 	for _, task := range tasks {
-		ingestCtx := s.NewIngestContext(s.ctx, time.Now().UTC(), flagChangeLogEnabled)
+		ingestCtx := s.NewIngestContext(s.ctx, time.Now().UTC(), flagChangeLogEnabled, task.JobId.ValueOrZero())
 		fileData, err := s.ProcessIngestFile(ingestCtx, task)
 
 		switch {
@@ -323,5 +343,16 @@ func (s *GraphifyService) ProcessTasks(updateJob UpdateJobFunc) {
 
 	if flagChangeLogEnabled {
 		s.changeManager.FlushStats()
+	}
+}
+
+// RegisterSourceKind - returns a function that will register a source kind and then refresh the in-memory DAWGS kind map
+func (s *GraphifyService) RegisterSourceKind(ctx context.Context) func(kind graph.Kind) error {
+	return func(kind graph.Kind) error {
+		if err := s.db.RegisterSourceKind(ctx)(kind); err != nil {
+			return err
+		} else {
+			return s.graphdb.RefreshKinds(ctx)
+		}
 	}
 }

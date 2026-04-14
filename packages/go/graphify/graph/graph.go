@@ -35,6 +35,7 @@ import (
 	"github.com/specterops/bloodhound/cmd/api/src/migrations"
 	"github.com/specterops/bloodhound/cmd/api/src/model"
 	"github.com/specterops/bloodhound/cmd/api/src/services/graphify"
+	"github.com/specterops/bloodhound/cmd/api/src/services/graphify/endpoint"
 	"github.com/specterops/bloodhound/cmd/api/src/services/upload"
 	"github.com/specterops/bloodhound/packages/go/bhlog/attr"
 	"github.com/specterops/bloodhound/packages/go/graphschema"
@@ -162,7 +163,7 @@ func (s *CommunityGraphService) InitializeService(ctx context.Context, connectio
 		return fmt.Errorf("error opening database: %w", err)
 	}
 
-	s.db = database.NewBloodhoundDB(gormDB, auth.NewIdentityResolver())
+	s.db = database.NewBloodhoundDB(gormDB, auth.NewIdentityResolver(), config.Configuration{})
 
 	if s.db != nil {
 		err := s.db.Wipe(ctx)
@@ -175,8 +176,10 @@ func (s *CommunityGraphService) InitializeService(ctx context.Context, connectio
 
 	if err := s.db.Migrate(ctx); err != nil {
 		return fmt.Errorf("error migrating database: %w", err)
-	} else if err := migrations.NewGraphMigrator(graphDB).Migrate(ctx, graphschema.DefaultGraphSchema()); err != nil {
+	} else if err := migrations.NewGraphMigrator(graphDB).Migrate(ctx); err != nil {
 		return fmt.Errorf("error migrating graph schema: %w", err)
+	} else if err := s.db.PopulateExtensionData(ctx); err != nil {
+		return fmt.Errorf("error populating extension data: %w", err)
 	} else if err = graphDB.SetDefaultGraph(ctx, graphschema.DefaultGraph()); err != nil {
 		return fmt.Errorf("error setting default graph: %w", err)
 	}
@@ -423,7 +426,7 @@ func ingestData(ctx context.Context, service GraphService, filepaths []string, d
 
 	for _, filepath := range filepaths {
 		err := database.BatchOperation(ctx, func(batch graph.Batch) error {
-			ingestCtx := graphify.NewIngestContext(ctx, graphify.WithIngestTime(ingestTime), graphify.WithBatchUpdater(batch))
+			ingestCtx := graphify.NewIngestContext(ctx, graphify.WithIngestTime(ingestTime), graphify.WithBatchUpdater(batch), graphify.WithEndpointResolver(endpoint.NewResolver(database)))
 
 			file, err := os.Open(filepath)
 			if err != nil {
@@ -444,12 +447,8 @@ func ingestData(ctx context.Context, service GraphService, filepaths []string, d
 		}
 	}
 
-	if len(errs) > 0 {
-		var errStrings []string
-		for _, err := range errs {
-			errStrings = append(errStrings, err.Error())
-		}
-		slog.WarnContext(ctx, "Errors occurred while ingesting files", slog.Any("errors", errStrings))
+	for _, err := range errs {
+		slog.WarnContext(ctx, "Error occurred while ingesting files", attr.Error(err))
 	}
 
 	return nil

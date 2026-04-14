@@ -14,20 +14,14 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import {
-    TooltipContent,
-    TooltipPortal,
-    TooltipProvider,
-    TooltipRoot,
-    TooltipTrigger,
-} from '@bloodhoundenterprise/doodleui';
 import { faCropAlt } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { MenuItem, Popper } from '@mui/material';
+import { TooltipContent, TooltipPortal, TooltipProvider, TooltipRoot, TooltipTrigger } from 'doodle-ui';
 import capitalize from 'lodash/capitalize';
 import isEmpty from 'lodash/isEmpty';
 import { useRef, useState } from 'react';
-import { useExploreParams } from '../../hooks';
+import { useExploreParams, useKeybindings } from '../../hooks';
 import { exportToJson } from '../../utils/exportGraphData';
 import GraphButton from '../GraphButton';
 import GraphMenu from '../GraphMenu';
@@ -67,6 +61,15 @@ function GraphControls<T extends readonly string[]>(props: GraphControlsProps<T>
     const [isCurrentSearchOpen, setIsCurrentSearchOpen] = useState(false);
 
     const currentSearchAnchorElement = useRef(null);
+
+    useKeybindings({
+        shift: {
+            Slash: () => {
+                setIsCurrentSearchOpen(!isCurrentSearchOpen);
+            },
+        },
+        KeyG: onReset,
+    });
 
     const handleToggleAllLabels = () => {
         if (showNodeLabels && showEdgeLabels) {
@@ -166,13 +169,11 @@ function GraphControls<T extends readonly string[]>(props: GraphControlsProps<T>
                 anchorEl={currentSearchAnchorElement.current}
                 placement='top'
                 disablePortal
+                aria-label='Search Current Nodes'
                 className='w-[90%] z-[1]'>
                 <div className='pointer-events-auto' data-testid='explore_graph-controls_search-current-nodes-popper'>
                     <SearchCurrentNodes
-                        sx={{
-                            padding: 1,
-                            marginBottom: 1,
-                        }}
+                        className='p-2 mb-2'
                         currentNodes={currentNodes}
                         onSelect={(node) => {
                             onSearchedNodeClick(node);

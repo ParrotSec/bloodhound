@@ -103,45 +103,41 @@ export const GraphEvents = forwardRef(function GraphEvents(
 
     const sigmaChartRef = ref as React.MutableRefObject<SigmaChartRef | null>;
 
-    useImperativeHandle(
-        sigmaChartRef,
-        () => {
-            return {
-                zoomTo: (id: string) => {
-                    const node = sigma.getNodeDisplayData(id);
+    useImperativeHandle(sigmaChartRef, () => {
+        return {
+            zoomTo: (id: string) => {
+                const node = sigma.getNodeDisplayData(id);
 
-                    if (node) {
-                        sigma.getCamera().animate(
-                            {
-                                x: node?.x,
-                                y: node?.y,
-                                ratio: 1,
-                            },
-                            {
-                                easing: 'quadraticOut',
-                            },
-                            () => {
-                                sigma.scheduleRefresh();
-                            }
-                        );
-                    }
-                },
-                resetCamera: () => {
-                    resetCamera(sigma);
-                },
+                if (node) {
+                    sigma.getCamera().animate(
+                        {
+                            x: node?.x,
+                            y: node?.y,
+                            ratio: 1,
+                        },
+                        {
+                            easing: 'quadraticOut',
+                        },
+                        () => {
+                            sigma.scheduleRefresh();
+                        }
+                    );
+                }
+            },
+            resetCamera: () => {
+                resetCamera(sigma);
+            },
 
-                runSequentialLayout: () => {
-                    sequentialLayout(graph);
-                    resetCamera(sigma);
-                },
-                runStandardLayout: () => {
-                    standardLayout(graph);
-                    resetCamera(sigma);
-                },
-            };
-        },
-        [sigma, graph]
-    );
+            runSequentialLayout: () => {
+                sequentialLayout(graph);
+                resetCamera(sigma);
+            },
+            runStandardLayout: () => {
+                standardLayout(graph);
+                resetCamera(sigma);
+            },
+        };
+    }, [sigma, graph]);
 
     const sigmaContainer = document.getElementById('sigma-container');
     const { getControlAtMidpoint, getLineLength, calculateCurveHeight } = bezier;
@@ -241,6 +237,10 @@ export const GraphEvents = forwardRef(function GraphEvents(
             },
             doubleClickNode: (event) => {
                 // Prevent zoom when node is double clicked
+                preventAllDefaults(event);
+            },
+            doubleClick: (event) => {
+                // Prevent zoom when graph is double clicked
                 preventAllDefaults(event);
             },
             clickNode: (event) => {

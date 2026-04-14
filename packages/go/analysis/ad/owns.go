@@ -21,12 +21,14 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/specterops/dawgs/algo"
 	"github.com/specterops/dawgs/util/channels"
 
 	"github.com/specterops/bloodhound/packages/go/analysis"
 	"github.com/specterops/bloodhound/packages/go/analysis/ad/wellknown"
-	"github.com/specterops/bloodhound/packages/go/analysis/impact"
+	"github.com/specterops/bloodhound/packages/go/analysis/post"
 	"github.com/specterops/bloodhound/packages/go/bhlog/attr"
+	"github.com/specterops/bloodhound/packages/go/bhlog/measure"
 	"github.com/specterops/bloodhound/packages/go/graphschema/ad"
 	"github.com/specterops/bloodhound/packages/go/graphschema/common"
 	"github.com/specterops/dawgs/cardinality"
@@ -35,20 +37,29 @@ import (
 	"github.com/specterops/dawgs/query"
 )
 
-func PostOwnsAndWriteOwner(ctx context.Context, db graph.Database, groupExpansions impact.PathAggregator) (*analysis.AtomicPostProcessingStats, error) {
+func PostOwnsAndWriteOwner(ctx context.Context, db graph.Database, localGroupData *LocalGroupData) (*post.AtomicPostProcessingStats, error) {
+	defer measure.ContextLogAndMeasure(
+		ctx,
+		slog.LevelInfo,
+		"Post-processing Owns and WriteOwner",
+		attr.Namespace("analysis"),
+		attr.Function("PostOwnsAndWriteOwner"),
+		attr.Scope("process"),
+	)()
+
 	operation := analysis.NewPostRelationshipOperation(ctx, db, "PostOwnsAndWriteOwner")
 
 	// Get the dSHeuristics values for all domains
 	if dsHeuristicsCache, anyEnforced, err := GetDsHeuristicsCache(ctx, db); err != nil {
 		slog.ErrorContext(ctx, "Failed fetching dsheuristics values for postownsandwriteowner", attr.Error(err))
 		return nil, err
-	} else if adminGroupIds, err := FetchAdminGroupIds(ctx, db, groupExpansions); err != nil {
+	} else if adminGroupIds, err := FetchAdminGroupIds(ctx, db, localGroupData.GroupMembershipCache); err != nil {
 		// Get the admin group IDs
 		slog.ErrorContext(ctx, "Failed fetching admin group ids values for postownsandwriteowner", attr.Error(err))
 	} else {
 
 		// Get all source nodes of Owns ACEs (i.e., owning principals) where the target node has no ACEs granting abusable explicit permissions to OWNER RIGHTS
-		if err := operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
+		if err := operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
 			if relationships, err := ops.FetchRelationships(tx.Relationships().Filterf(func() graph.Criteria {
 				return query.And(
 					query.Kind(query.Relationship(), ad.OwnsRaw),
@@ -104,7 +115,7 @@ func PostOwnsAndWriteOwner(ctx context.Context, db graph.Database, groupExpansio
 		}
 
 		// Get all source nodes of WriteOwner ACEs where the target node has no ACEs granting explicit abusable permissions to OWNER RIGHTS
-		if err := operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
+		if err := operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
 
 			if relationships, err := ops.FetchRelationships(tx.Relationships().Filterf(func() graph.Criteria {
 				return query.And(
@@ -163,11 +174,11 @@ func PostOwnsAndWriteOwner(ctx context.Context, db graph.Database, groupExpansio
 	return &operation.Stats, operation.Done()
 }
 
-func createPostRelFromRaw(rel *graph.Relationship, kind graph.Kind) analysis.CreatePostRelationshipJob {
+func createPostRelFromRaw(rel *graph.Relationship, kind graph.Kind) post.EnsureRelationshipJob {
 	isInherited, _ := rel.Properties.GetOrDefault(common.IsInherited.String(), false).Bool()
 	inheritanceHash, _ := rel.Properties.GetOrDefault(ad.InheritanceHash.String(), "").String()
 
-	return analysis.CreatePostRelationshipJob{
+	return post.EnsureRelationshipJob{
 		FromID: rel.StartID,
 		ToID:   rel.EndID,
 		Kind:   kind,
@@ -193,7 +204,7 @@ func isTargetNodeComputerDerived(node *graph.Node) (bool, error) {
 	}
 }
 
-func FetchAdminGroupIds(ctx context.Context, db graph.Database, groupExpansions impact.PathAggregator) (cardinality.Duplex[uint64], error) {
+func FetchAdminGroupIds(ctx context.Context, db graph.Database, groupExpansions *algo.ReachabilityCache) (cardinality.Duplex[uint64], error) {
 	adminIds := cardinality.NewBitmap64()
 
 	return adminIds, db.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -205,7 +216,7 @@ func FetchAdminGroupIds(ctx context.Context, db graph.Database, groupExpansions 
 		).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
 			for id := range cursor.Chan() {
 				adminIds.Add(id.Uint64())
-				adminIds.Or(groupExpansions.Cardinality(id.Uint64()))
+				groupExpansions.OrReach(id.Uint64(), graph.DirectionInbound, adminIds)
 			}
 
 			return cursor.Error()

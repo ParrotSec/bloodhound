@@ -30,6 +30,7 @@ import AZAddMembers from './AZAddMembers/AZAddMembers';
 import AZAddOwner from './AZAddOwner/AZAddOwner';
 import AZAddSecret from './AZAddSecret/AZAddSecret';
 import AZAppAdmin from './AZAppAdmin/AZAppAdmin';
+import AZAuthenticatesTo from './AZAuthenticatesTo/AZAuthenticatesTo';
 import AZAutomationContributor from './AZAutomationContributor/AZAutomationContributor';
 import AZAvereContributor from './AZAvereContributor/AZAvereContributor';
 import AZCloudAppAdmin from './AZCloudAppAdmin/AZCloudAppAdmin';
@@ -58,6 +59,7 @@ import AZMGServicePrincipalEndpoint_ReadWrite_All from './AZMGServicePrincipalEn
 import AZManagedIdentity from './AZManagedIdentity/AZManagedIdentity';
 import AZMemberOf from './AZMemberOf/AZMemberOf';
 import AZNodeResourceGroup from './AZNodeResourceGroup/AZNodeResourceGroup';
+import AZOwner from './AZOwner/AZOwner';
 import AZOwns from './AZOwns/AZOwns';
 import AZPrivilegedAuthAdmin from './AZPrivilegedAuthAdmin/AZPrivilegedAuthAdmin';
 import AZPrivilegedRoleAdmin from './AZPrivilegedRoleAdmin/AZPrivilegedRoleAdmin';
@@ -198,6 +200,7 @@ const EdgeInfoComponents = {
     AZManagedIdentity: AZManagedIdentity,
     AZMemberOf: AZMemberOf,
     AZOwns: AZOwns,
+    AZOwner: AZOwner,
     AZPrivilegedAuthAdmin: AZPrivilegedAuthAdmin,
     AZPrivilegedRoleAdmin: AZPrivilegedRoleAdmin,
     AZResetPassword: AZResetPassword,
@@ -274,6 +277,7 @@ const EdgeInfoComponents = {
     ProtectAdminGroups: ProtectAdminGroups,
     ClaimSpecialIdentity: ClaimSpecialIdentity,
     HasTrustKeys: HasTrustKeys,
+    AZAuthenticatesTo: AZAuthenticatesTo,
 };
 
 export default EdgeInfoComponents;

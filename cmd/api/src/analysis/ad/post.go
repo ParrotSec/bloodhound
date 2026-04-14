@@ -1,4 +1,4 @@
-// Copyright 2023 Specter Ops, Inc.
+// Copyright 2026 Specter Ops, Inc.
 //
 // Licensed under the Apache License, Version 2.0
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,70 @@ package ad
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/specterops/bloodhound/packages/go/analysis"
 	adAnalysis "github.com/specterops/bloodhound/packages/go/analysis/ad"
+	"github.com/specterops/bloodhound/packages/go/analysis/post"
+	"github.com/specterops/bloodhound/packages/go/bhlog/attr"
+	"github.com/specterops/bloodhound/packages/go/bhlog/measure"
 	"github.com/specterops/bloodhound/packages/go/graphschema/ad"
 	"github.com/specterops/bloodhound/packages/go/graphschema/azure"
 	"github.com/specterops/dawgs/graph"
 )
 
-func Post(ctx context.Context, db graph.Database, adcsEnabled, citrixEnabled, ntlmEnabled bool, compositionCounter *analysis.CompositionCounter) (*analysis.AtomicPostProcessingStats, error) {
-	aggregateStats := analysis.NewAtomicPostProcessingStats()
-	if stats, err := analysis.DeleteTransitEdges(ctx, db, graph.Kinds{ad.Entity, azure.Entity}, ad.PostProcessedRelationships()...); err != nil {
+func Post(ctx context.Context, db graph.Database, adcsEnabled, citrixEnabled, ntlmEnabled bool, compositionCounter *analysis.CompositionCounter) (*post.AtomicPostProcessingStats, error) {
+	defer measure.ContextLogAndMeasure(
+		ctx,
+		slog.LevelInfo,
+		"Active Directory Post Processing",
+		attr.Namespace("analysis"),
+		attr.Function("Post"),
+		attr.Scope("step"),
+	)()
+
+	aggregateStats := post.NewAtomicPostProcessingStats()
+
+	if err := adAnalysis.FixWellKnownNodeTypes(ctx, db); err != nil {
 		return &aggregateStats, err
-	} else if groupExpansions, err := adAnalysis.ExpandAllRDPLocalGroups(ctx, db); err != nil {
+	} else if err := adAnalysis.RunDomainAssociations(ctx, db); err != nil {
 		return &aggregateStats, err
-	} else if dcSyncStats, err := adAnalysis.PostDCSync(ctx, db, groupExpansions); err != nil {
+	} else if err := adAnalysis.LinkWellKnownNodes(ctx, db); err != nil {
+		return &aggregateStats, err
+	} else if deleteTransitEdgesStats, err := analysis.DeleteTransitEdges(ctx, db, graph.Kinds{ad.Entity, azure.Entity}, ad.PostProcessedRelationships()); err != nil {
+		return &aggregateStats, err
+	} else if localGroupData, err := adAnalysis.FetchLocalGroupData(ctx, db); err != nil {
+		return &aggregateStats, err
+	} else if dcSyncStats, err := adAnalysis.PostDCSync(ctx, db, localGroupData); err != nil {
 		return &aggregateStats, err
 	} else if protectAdminGroupsStats, err := adAnalysis.PostProtectAdminGroups(ctx, db); err != nil {
 		return &aggregateStats, err
-	} else if syncLAPSStats, err := adAnalysis.PostSyncLAPSPassword(ctx, db, groupExpansions); err != nil {
+	} else if syncLAPSStats, err := adAnalysis.PostSyncLAPSPassword(ctx, db, localGroupData); err != nil {
 		return &aggregateStats, err
 	} else if hasTrustKeyStats, err := adAnalysis.PostHasTrustKeys(ctx, db); err != nil {
 		return &aggregateStats, err
-	} else if localGroupStats, err := adAnalysis.PostLocalGroups(ctx, db, groupExpansions, false, citrixEnabled); err != nil {
+	} else if localGroupStats, err := adAnalysis.PostLocalGroups(ctx, db, localGroupData); err != nil {
 		return &aggregateStats, err
-	} else if adcsStats, adcsCache, err := adAnalysis.PostADCS(ctx, db, groupExpansions, adcsEnabled); err != nil {
+	} else if canRDPStats, err := adAnalysis.PostCanRDP(ctx, db, localGroupData, true, citrixEnabled); err != nil {
 		return &aggregateStats, err
-	} else if ownsStats, err := adAnalysis.PostOwnsAndWriteOwner(ctx, db, groupExpansions); err != nil {
+	} else if adcsStats, adcsCache, err := adAnalysis.PostADCS(ctx, db, localGroupData, adcsEnabled); err != nil {
 		return &aggregateStats, err
-	} else if ntlmStats, err := adAnalysis.PostNTLM(ctx, db, groupExpansions, adcsCache, ntlmEnabled, compositionCounter); err != nil {
+	} else if ownsStats, err := adAnalysis.PostOwnsAndWriteOwner(ctx, db, localGroupData); err != nil {
+		return &aggregateStats, err
+	} else if ntlmStats, err := adAnalysis.PostNTLM(ctx, db, localGroupData, adcsCache, ntlmEnabled, compositionCounter); err != nil {
 		return &aggregateStats, err
 	} else {
-		aggregateStats.Merge(stats)       // DeleteTransitEdges
-		aggregateStats.Merge(dcSyncStats) // PostDCSync
-		aggregateStats.Merge(protectAdminGroupsStats)
+		aggregateStats.Merge(deleteTransitEdgesStats)
 		aggregateStats.Merge(syncLAPSStats)
 		aggregateStats.Merge(hasTrustKeyStats)
+		aggregateStats.Merge(dcSyncStats)
+		aggregateStats.Merge(protectAdminGroupsStats)
 		aggregateStats.Merge(localGroupStats)
+		aggregateStats.Merge(canRDPStats)
 		aggregateStats.Merge(adcsStats)
 		aggregateStats.Merge(ownsStats)
 		aggregateStats.Merge(ntlmStats)
+
 		return &aggregateStats, nil
 	}
 }

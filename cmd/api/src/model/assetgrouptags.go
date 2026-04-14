@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	AssetGroupActorSystem              = "SYSTEM"
+	AssetGroupActorBloodHound          = "BloodHound"
 	AssetGroupTierZeroPosition         = 1
 	AssetGroupTierHygienePlaceholderId = 0
 )
@@ -89,6 +89,16 @@ const (
 	TierZeroGlyph = "gem"
 	OwnedGlyph    = "skull"
 )
+
+type AssetGroupTagCounts struct {
+	Members           int64 `json:"members"`
+	Selectors         int   `json:"selectors"`
+	CustomSelectors   int   `json:"custom_selectors"`
+	DefaultSelectors  int   `json:"default_selectors"`
+	DisabledSelectors int   `json:"disabled_selectors"`
+}
+
+type AssetGroupTagCountsMap map[int]AssetGroupTagCounts
 
 type AssetGroupTag struct {
 	ID              int               `json:"id"`
@@ -181,6 +191,10 @@ func (s AssetGroupTag) GetExpansionMethod() AssetGroupExpansionMethod {
 	default:
 		return AssetGroupExpansionMethodNone
 	}
+}
+
+func (s AssetGroupTag) IsTierZero() bool {
+	return s.Position.ValueOrZero() == AssetGroupTierZeroPosition
 }
 
 type SelectorSeeds []SelectorSeed
@@ -289,14 +303,33 @@ func (s AssetGroupSelectorNode) TableName() string {
 	return "asset_group_tag_selector_nodes"
 }
 
+func (s AssetGroupSelectorNode) IsStringColumn(filter string) bool {
+	switch filter {
+	case "primary_kind",
+		"name",
+		"object_id":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s AssetGroupSelectorNode) ValidFilters() map[string][]FilterOperator {
+	return map[string][]FilterOperator{
+		"name":         {Equals, NotEquals, ApproximatelyEquals},
+		"object_id":    {Equals, NotEquals, ApproximatelyEquals},
+		"primary_kind": {Equals, NotEquals, ApproximatelyEquals},
+	}
+}
+
 /*
 These are the relevant properties for asset group tags. This method serves to keep consistency across the feature
 */
-func GetAssetGroupMemberProperties(node *graph.Node) (primaryKind, displayName, objectId, envId string) {
-	primaryKind = analysis.GetNodeKindDisplayLabel(node)
+func GetAssetGroupMemberProperties(validPrimaryKinds graphschema.ValidPrimaryKinds, node *graph.Node) (primaryKind, displayName, objectId, envId string) {
+	primaryKind = analysis.GetNodeKindDisplayLabel(validPrimaryKinds, node)
 	displayName, _ = node.Properties.GetWithFallback(common.Name.String(), graphschema.DefaultMissingName, common.DisplayName.String(), common.ObjectID.String()).String()
 	objectId, _ = node.Properties.GetOrDefault(common.ObjectID.String(), graphschema.DefaultMissingObjectId).String()
-	envId, _ = node.Properties.GetWithFallback(ad.DomainSID.String(), "", azure.TenantID.String()).String()
+	envId, _ = node.Properties.GetWithFallback(ad.DomainSID.String(), "", azure.TenantID.String(), graphschema.EnvironmentIDKey).String()
 
 	return primaryKind, displayName, objectId, envId
 }

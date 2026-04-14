@@ -14,7 +14,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import { Card } from '@bloodhoundenterprise/doodleui';
+import { Card } from 'doodle-ui';
 import type { FileIngestJob } from 'js-client-library';
 import { FC, useState } from 'react';
 import { useGetFileUploadsQuery } from '../../hooks';
@@ -27,7 +27,7 @@ import { FileIngestFilterDialog } from './FileIngestFilterDialog';
 
 const HEADERS = ['ID / User / Status', 'Message', 'Start Time', 'Duration', 'File Information'];
 
-const getHeaders = (headers: string[]) => headers.map((label) => ({ label, verticalAlign: 'baseline' }));
+const getHeaders = (headers: string[]) => headers.map((label) => ({ label, className: 'align-baseline' }));
 
 const getRow =
     (onSelectJob: React.Dispatch<React.SetStateAction<FileIngestJob | undefined>>) => (job: FileIngestJob) => {

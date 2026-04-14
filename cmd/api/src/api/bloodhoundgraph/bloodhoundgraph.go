@@ -16,7 +16,9 @@
 
 package bloodhoundgraph
 
-//TODO: Move styling responsibilites to the UI or move shared styling definitions to a cue file to generate from one source of truth
+import "github.com/specterops/dawgs/graph"
+
+//TODO: Move styling responsibilities to the UI or move shared styling definitions to a cue file to generate from one source of truth
 
 type BloodHoundGraphGlyph struct {
 	Angle    int                        `json:"angle,omitempty"`
@@ -128,6 +130,11 @@ type BloodHoundGraphLink struct {
 	Width     int                       `json:"width,omitempty"`
 }
 
+func (s *BloodHoundGraphNode) SetNodeStyle(nType string) {
+	s.SetIcon(nType)
+	s.SetBackground(nType)
+}
+
 func (s *BloodHoundGraphNode) SetIcon(nType string) {
 	switch nType {
 	case "AZApp":
@@ -205,6 +212,10 @@ func (s *BloodHoundGraphNode) SetIcon(nType string) {
 	case "AZAutomationAccount":
 		s.FontIcon = &BloodHoundGraphFontIcon{
 			Text: "fas fa-cog",
+		}
+	case "AZFederatedIdentityCredential":
+		s.FontIcon = &BloodHoundGraphFontIcon{
+			Text: "fas fa-key",
 		}
 	case "User":
 		s.FontIcon = &BloodHoundGraphFontIcon{
@@ -315,6 +326,8 @@ func (s *BloodHoundGraphNode) SetBackground(nType string) {
 		s.Color = "#9EE047"
 	case "AZAutomationAccount":
 		s.Color = "#F4BA44"
+	case "AZFederatedIdentityCredential":
+		s.Color = "#FFEE8C"
 	case "User":
 		s.Color = "#17E625"
 	case "Group":
@@ -344,4 +357,11 @@ func (s *BloodHoundGraphNode) SetBackground(nType string) {
 	default:
 		s.Color = "#EEE"
 	}
+}
+
+func (s *BloodHoundGraphNode) SetNodeType(kind graph.Kind) {
+	if s.Data == nil {
+		s.Data = make(map[string]any)
+	}
+	s.Data["nodetype"] = kind
 }
