@@ -15,7 +15,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build serial_integration
-// +build serial_integration
 
 package analysis_test
 
@@ -23,12 +22,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/specterops/bloodhound/cmd/api/src/test"
 	"github.com/specterops/bloodhound/cmd/api/src/test/integration"
-	"github.com/specterops/bloodhound/packages/go/analysis"
 	ad2 "github.com/specterops/bloodhound/packages/go/analysis/ad"
 	schema "github.com/specterops/bloodhound/packages/go/graphschema"
-	"github.com/specterops/bloodhound/packages/go/graphschema/ad"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
@@ -47,47 +43,19 @@ func FetchNumHarnessNodes(db graph.Database) (int64, error) {
 	})
 }
 
-func TestClearOrphanedNodes(t *testing.T) {
-	const numNodesToCreate = 1000
-
-	testContext := integration.NewGraphTestContext(t, schema.DefaultGraphSchema())
-	testContext.DatabaseTest(func(harness integration.HarnessDetails, db graph.Database) {
-		numHarnessNodes, err := FetchNumHarnessNodes(db)
-		test.RequireNilErr(t, err)
-
-		test.RequireNilErr(t, db.WriteTransaction(context.Background(), func(tx graph.Transaction) error {
-			for numCreated := 0; numCreated < numNodesToCreate; numCreated++ {
-				if _, err := tx.CreateNode(graph.NewProperties(), ad.Entity); err != nil {
-					return err
-				}
-			}
-
-			return nil
-		}))
-
-		numNodesAfterCreation, err := FetchNumHarnessNodes(db)
-		test.RequireNilErr(t, err)
-
-		require.Equal(t, numHarnessNodes+numNodesToCreate, numNodesAfterCreation)
-		test.RequireNilErr(t, analysis.ClearOrphanedNodes(context.Background(), db))
-
-		numNodesAfterDeletion, err := FetchNumHarnessNodes(db)
-		test.RequireNilErr(t, err)
-		require.Equal(t, numHarnessNodes, numNodesAfterDeletion)
-	})
-}
-
 func TestCrossProduct(t *testing.T) {
 	testContext := integration.NewGraphTestContext(t, schema.DefaultGraphSchema())
 	testContext.DatabaseTransactionTestWithSetup(func(harness *integration.HarnessDetails) error {
 		harness.ShortcutHarness.Setup(testContext)
 		return nil
-	}, func(harness integration.HarnessDetails, db graph.Database, tx graph.Transaction) {
+	}, func(harness integration.HarnessDetails, graphDB graph.Database, tx graph.Transaction) {
 		firstSet := []*graph.Node{testContext.Harness.ShortcutHarness.Group1}
 		secondSet := []*graph.Node{testContext.Harness.ShortcutHarness.Group2}
-		groupExpansions, err := ad2.ExpandAllRDPLocalGroups(context.Background(), db)
-		require.Nil(t, err)
-		results := ad2.CalculateCrossProductNodeSets(tx, groupExpansions, firstSet, secondSet)
+
+		excludedGroups, err := ad2.FetchLocalGroupData(context.Background(), graphDB)
+		require.NoError(t, err)
+
+		results := ad2.CalculateCrossProductNodeSets(excludedGroups, firstSet, secondSet)
 		require.Truef(t, results.Contains(harness.ShortcutHarness.Group3.ID.Uint64()), "missing id %d", harness.ShortcutHarness.Group3.ID.Uint64())
 	})
 }
@@ -97,12 +65,14 @@ func TestCrossProductAuthUsers(t *testing.T) {
 	testContext.DatabaseTransactionTestWithSetup(func(harness *integration.HarnessDetails) error {
 		harness.ShortcutHarnessAuthUsers.Setup(testContext)
 		return nil
-	}, func(harness integration.HarnessDetails, db graph.Database, tx graph.Transaction) {
+	}, func(harness integration.HarnessDetails, graphDB graph.Database, tx graph.Transaction) {
 		firstSet := []*graph.Node{testContext.Harness.ShortcutHarnessAuthUsers.Group1}
 		secondSet := []*graph.Node{testContext.Harness.ShortcutHarnessAuthUsers.Group2}
-		groupExpansions, err := ad2.ExpandAllRDPLocalGroups(context.Background(), db)
-		require.Nil(t, err)
-		results := ad2.CalculateCrossProductNodeSets(tx, groupExpansions, firstSet, secondSet)
+
+		excludedGroups, err := ad2.FetchLocalGroupData(context.Background(), graphDB)
+		require.NoError(t, err)
+
+		results := ad2.CalculateCrossProductNodeSets(excludedGroups, firstSet, secondSet)
 		require.True(t, results.Contains(harness.ShortcutHarnessAuthUsers.Group2.ID.Uint64()))
 	})
 }
@@ -112,12 +82,14 @@ func TestCrossProductEveryone(t *testing.T) {
 	testContext.DatabaseTransactionTestWithSetup(func(harness *integration.HarnessDetails) error {
 		harness.ShortcutHarnessEveryone.Setup(testContext)
 		return nil
-	}, func(harness integration.HarnessDetails, db graph.Database, tx graph.Transaction) {
+	}, func(harness integration.HarnessDetails, graphDB graph.Database, tx graph.Transaction) {
 		firstSet := []*graph.Node{testContext.Harness.ShortcutHarnessEveryone.Group1}
 		secondSet := []*graph.Node{testContext.Harness.ShortcutHarnessEveryone.Group2}
-		groupExpansions, err := ad2.ExpandAllRDPLocalGroups(context.Background(), db)
-		require.Nil(t, err)
-		results := ad2.CalculateCrossProductNodeSets(tx, groupExpansions, firstSet, secondSet)
+
+		excludedGroups, err := ad2.FetchLocalGroupData(context.Background(), graphDB)
+		require.NoError(t, err)
+
+		results := ad2.CalculateCrossProductNodeSets(excludedGroups, firstSet, secondSet)
 		require.True(t, results.Contains(harness.ShortcutHarnessEveryone.Group2.ID.Uint64()))
 	})
 }
@@ -127,12 +99,14 @@ func TestCrossProductEveryone2(t *testing.T) {
 	testContext.DatabaseTransactionTestWithSetup(func(harness *integration.HarnessDetails) error {
 		harness.ShortcutHarnessEveryone2.Setup(testContext)
 		return nil
-	}, func(harness integration.HarnessDetails, db graph.Database, tx graph.Transaction) {
+	}, func(harness integration.HarnessDetails, graphDB graph.Database, tx graph.Transaction) {
 		firstSet := []*graph.Node{testContext.Harness.ShortcutHarnessEveryone2.Group1}
 		secondSet := []*graph.Node{testContext.Harness.ShortcutHarnessEveryone2.Group2}
-		groupExpansions, err := ad2.ExpandAllRDPLocalGroups(context.Background(), db)
-		require.Nil(t, err)
-		results := ad2.CalculateCrossProductNodeSets(tx, groupExpansions, firstSet, secondSet)
+
+		excludedGroups, err := ad2.FetchLocalGroupData(context.Background(), graphDB)
+		require.NoError(t, err)
+
+		results := ad2.CalculateCrossProductNodeSets(excludedGroups, firstSet, secondSet)
 		require.True(t, results.Contains(harness.ShortcutHarnessEveryone2.Group1.ID.Uint64()))
 		require.True(t, results.Contains(harness.ShortcutHarnessEveryone2.Group2.ID.Uint64()))
 	})

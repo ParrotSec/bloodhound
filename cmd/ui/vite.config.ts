@@ -39,9 +39,10 @@ export default defineConfig(({ mode }) => {
                     'js-client-library',
                     'src'
                 ),
+                'doodle-ui': path.resolve(__dirname, '..', '..', 'packages', 'javascript', 'doodle-ui', 'src'),
             },
             dedupe: [
-                '@bloodhoundenterprise/doodleui',
+                'doodle-ui',
                 '@emotion/react',
                 '@emotion/styled',
                 '@faker-js/faker',
@@ -94,6 +95,15 @@ export default defineConfig(({ mode }) => {
                 reportsDirectory: './coverage',
                 reporter: ['text-summary', 'json-summary'],
             },
+            reporters: [
+                'default',
+                [
+                    'allure-vitest/reporter',
+                    {
+                        resultsDir: '../../allure-results',
+                    },
+                ],
+            ],
         },
         build: {
             outDir: env.BUILD_PATH || './dist',

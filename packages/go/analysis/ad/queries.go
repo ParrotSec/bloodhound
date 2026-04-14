@@ -18,7 +18,7 @@ package ad
 
 import (
 	"context"
-	"fmt"
+
 	"log/slog"
 	"slices"
 	"time"
@@ -39,7 +39,7 @@ import (
 )
 
 func FetchGraphDBTierZeroTaggedAssets(ctx context.Context, db graph.Database, domainSID string) (graph.NodeSet, error) {
-	defer measure.ContextMeasure(ctx, slog.LevelInfo, "FetchGraphDBTierZeroTaggedAssets")()
+	defer measure.ContextMeasureWithThreshold(ctx, slog.LevelInfo, "FetchGraphDBTierZeroTaggedAssets")()
 
 	var (
 		nodes graph.NodeSet
@@ -61,7 +61,7 @@ func FetchGraphDBTierZeroTaggedAssets(ctx context.Context, db graph.Database, do
 }
 
 func FetchAllEnforcedGPOs(ctx context.Context, db graph.Database, targets graph.NodeSet) (graph.NodeSet, error) {
-	defer measure.ContextMeasure(ctx, slog.LevelInfo, "FetchAllEnforcedGPOs")()
+	defer measure.ContextMeasureWithThreshold(ctx, slog.LevelInfo, "FetchAllEnforcedGPOs")()
 
 	enforcedGPOs := graph.NewNodeSet()
 
@@ -79,7 +79,7 @@ func FetchAllEnforcedGPOs(ctx context.Context, db graph.Database, targets graph.
 }
 
 func FetchOUContainers(ctx context.Context, db graph.Database, targets graph.NodeSet) (graph.NodeSet, error) {
-	defer measure.ContextMeasure(ctx, slog.LevelInfo, "FetchOUContainers")()
+	defer measure.ContextMeasureWithThreshold(ctx, slog.LevelInfo, "FetchOUContainers")()
 
 	oUs := graph.NewNodeSet()
 
@@ -114,7 +114,7 @@ func FetchAllDomains(ctx context.Context, db graph.Database) ([]*graph.Node, err
 }
 
 func FetchActiveDirectoryTierZeroRoots(ctx context.Context, db graph.Database, domain *graph.Node, autoTagT0ParentObjectsFlag bool) (graph.NodeSet, error) {
-	defer measure.ContextLogAndMeasure(ctx, slog.LevelInfo, "FetchActiveDirectoryTierZeroRoots")()
+	defer measure.ContextLogAndMeasureWithThreshold(ctx, slog.LevelInfo, "FetchActiveDirectoryTierZeroRoots")()
 
 	if domainSID, err := domain.Properties.Get(common.ObjectID.String()).String(); err != nil {
 		return nil, err
@@ -1504,8 +1504,8 @@ func FetchGroupMembers(ctx context.Context, db graph.Database, root *graph.Node,
 }
 
 const (
-	windows    = "WINDOWS"
-	ninetyDays = time.Hour * 24 * 90
+	windows      = "WINDOWS"
+	fourteenDays = time.Hour * 24 * 14
 )
 
 func FetchLocalGroupCompleteness(tx graph.Transaction, domainSIDs ...string) (float64, error) {
@@ -1515,7 +1515,8 @@ func FetchLocalGroupCompleteness(tx graph.Transaction, domainSIDs ...string) (fl
 		filters := []graph.Criteria{
 			query.Kind(query.Node(), ad.Computer),
 			query.StringContains(query.NodeProperty(common.OperatingSystem.String()), windows),
-			query.Exists(query.NodeProperty(common.PasswordLastSet.String())),
+			query.Equals(query.NodeProperty(common.Enabled.String()), true),
+			query.Exists(query.NodeProperty(ad.LastLogonTimestamp.String())),
 		}
 
 		if len(domainSIDs) > 0 {
@@ -1526,20 +1527,20 @@ func FetchLocalGroupCompleteness(tx graph.Transaction, domainSIDs ...string) (fl
 	})); err != nil {
 		return completeness, err
 	} else {
-		mostRecentPasswordLastSetTime := time.Unix(0, 0)
+		mostRecentLogonTimestamp := time.Unix(0, 0)
 
 		for _, computer := range computers {
-			if passwordLastSet, err := computer.Properties.Get(common.PasswordLastSet.String()).Time(); err != nil {
+			if lastLogonTimestamp, err := computer.Properties.Get(ad.LastLogonTimestamp.String()).Time(); err != nil {
 				return completeness, err
-			} else if passwordLastSet.After(mostRecentPasswordLastSetTime) {
-				mostRecentPasswordLastSetTime = passwordLastSet
+			} else if lastLogonTimestamp.After(mostRecentLogonTimestamp) {
+				mostRecentLogonTimestamp = lastLogonTimestamp
 			}
 		}
 
-		activityThreshold := mostRecentPasswordLastSetTime.Add(-ninetyDays)
+		activityThreshold := mostRecentLogonTimestamp.Add(-fourteenDays)
 
 		for _, computer := range computers {
-			if passwordLastSet, err := computer.Properties.Get(common.PasswordLastSet.String()).Time(); err != nil {
+			if passwordLastSet, err := computer.Properties.Get(ad.LastLogonTimestamp.String()).Time(); err != nil {
 				return completeness, err
 			} else if passwordLastSet.Before(activityThreshold) {
 				computers.Remove(computer.ID)
@@ -1583,6 +1584,7 @@ func FetchUserSessionCompleteness(tx graph.Transaction, domainSIDs ...string) (f
 	if users, err := ops.FetchNodeSet(tx.Nodes().Filterf(func() graph.Criteria {
 		filters := []graph.Criteria{
 			query.Kind(query.Node(), ad.User),
+			query.Equals(query.NodeProperty(common.Enabled.String()), true),
 			query.Exists(query.NodeProperty(ad.LastLogonTimestamp.String())),
 		}
 
@@ -1604,7 +1606,7 @@ func FetchUserSessionCompleteness(tx graph.Transaction, domainSIDs ...string) (f
 			}
 		}
 
-		activityThreshold := mostRecentLogonTimestamp.Add(-ninetyDays)
+		activityThreshold := mostRecentLogonTimestamp.Add(-fourteenDays)
 
 		for _, user := range users {
 			if userLastLogonTimestamp, err := user.Properties.Get(ad.LastLogonTimestamp.String()).Time(); err != nil {
@@ -1647,9 +1649,9 @@ func FetchUserSessionCompleteness(tx graph.Transaction, domainSIDs ...string) (f
 }
 
 func FetchAllGroupMembers(ctx context.Context, db graph.Database, targets graph.NodeSet) (graph.NodeSet, error) {
-	defer measure.ContextMeasure(ctx, slog.LevelInfo, "FetchAllGroupMembers")()
+	defer measure.ContextMeasureWithThreshold(ctx, slog.LevelInfo, "FetchAllGroupMembers")()
 
-	slog.InfoContext(ctx, fmt.Sprintf("Fetching group members for %d AD nodes", len(targets)))
+	slog.InfoContext(ctx, "Fetching group members for AD nodes", slog.Int("num_nodes", len(targets)))
 
 	allGroupMembers := graph.NewNodeSet()
 
@@ -1663,7 +1665,7 @@ func FetchAllGroupMembers(ctx context.Context, db graph.Database, targets graph.
 		}
 	}
 
-	slog.InfoContext(ctx, fmt.Sprintf("Collected %d group members", len(allGroupMembers)))
+	slog.InfoContext(ctx, "Collected group members", slog.Int("num_group_members", len(allGroupMembers)))
 	return allGroupMembers, nil
 }
 

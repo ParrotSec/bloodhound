@@ -14,7 +14,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import { Button } from '@bloodhoundenterprise/doodleui';
 import { Alert, Box, Checkbox, FormControl, FormControlLabel, FormGroup, Typography } from '@mui/material';
 import {
     DeleteConfirmationDialog,
@@ -27,6 +26,7 @@ import {
     useNotifications,
     usePermissions,
 } from 'bh-shared-ui';
+import { Button } from 'doodle-ui';
 import { ClearDatabaseRequest } from 'js-client-library';
 import { FC, useReducer } from 'react';
 import { useMutation } from 'react-query';
@@ -39,6 +39,7 @@ const initialState: State = {
     deleteCustomHighValueSelectors: false,
     deleteDataQualityHistory: false,
     deleteFileIngestHistory: false,
+    deleteHasSessionEdges: false,
     deleteSourceKinds: [],
 
     noSelectionError: false,
@@ -55,6 +56,7 @@ type State = {
     deleteCustomHighValueSelectors: boolean;
     deleteDataQualityHistory: boolean;
     deleteFileIngestHistory: boolean;
+    deleteHasSessionEdges: boolean;
     deleteSourceKinds: number[];
 
     // error state
@@ -102,6 +104,7 @@ const reducer = (state: State, action: Action): State => {
                 deleteCustomHighValueSelectors: false,
                 deleteDataQualityHistory: false,
                 deleteFileIngestHistory: false,
+                deleteHasSessionEdges: false,
                 deleteSourceKinds: [],
 
                 showSuccessMessage: true,
@@ -131,6 +134,7 @@ const reducer = (state: State, action: Action): State => {
                     state.deleteCustomHighValueSelectors,
                     state.deleteDataQualityHistory,
                     state.deleteFileIngestHistory,
+                    state.deleteHasSessionEdges,
                 ].filter(Boolean).length === 0 && state.deleteSourceKinds.length === 0;
 
             if (noSelection) {
@@ -170,6 +174,7 @@ const useDatabaseManagement = () => {
         deleteCustomHighValueSelectors,
         deleteDataQualityHistory,
         deleteFileIngestHistory,
+        deleteHasSessionEdges,
         deleteSourceKinds,
     } = state;
 
@@ -209,6 +214,7 @@ const useDatabaseManagement = () => {
         };
 
         const deleteAssetGroupSelectors = dedupe(assetGroupIds);
+        const deleteRelationships = deleteHasSessionEdges ? ['HasSession'] : [];
 
         mutation.mutate({
             deleteThisData: {
@@ -216,6 +222,7 @@ const useDatabaseManagement = () => {
                 deleteCollectedGraphData,
                 deleteDataQualityHistory,
                 deleteFileIngestHistory,
+                deleteRelationships,
                 deleteSourceKinds,
             },
         });
@@ -254,6 +261,7 @@ const DatabaseManagement: FC = () => {
         deleteCustomHighValueSelectors,
         deleteDataQualityHistory,
         deleteFileIngestHistory,
+        deleteHasSessionEdges,
         deleteSourceKinds,
     } = state;
 
@@ -282,14 +290,14 @@ const DatabaseManagement: FC = () => {
                 </Typography>
             }>
             <Box>
-                <Alert severity='warning' sx={{ mt: '1rem' }}>
+                <Alert severity='warning' className='mt-4'>
                     <strong>Caution: </strong> This change is irreversible and will delete data from your environment.
                 </Alert>
 
                 <Box display='flex' flexDirection='column' alignItems='start'>
                     <FormControl
                         variant='standard'
-                        sx={{ paddingBlock: 2 }}
+                        className='py-4'
                         error={state.noSelectionError || state.mutationError}>
                         {state.noSelectionError ? <Alert severity='error'>Please make a selection.</Alert> : null}
                         {state.mutationError ? (
@@ -306,7 +314,7 @@ const DatabaseManagement: FC = () => {
                             </Alert>
                         ) : null}
 
-                        <FormGroup sx={{ paddingTop: 1 }}>
+                        <FormGroup className='pt-2'>
                             <FeatureFlag
                                 flagKey='clear_graph_data'
                                 enabled={
@@ -357,6 +365,17 @@ const DatabaseManagement: FC = () => {
                                         checked={deleteDataQualityHistory}
                                         onChange={handleCheckbox}
                                         name='deleteDataQualityHistory'
+                                        disabled={!hasPermission}
+                                    />
+                                }
+                            />
+                            <FormControlLabel
+                                label='HasSession edges'
+                                control={
+                                    <Checkbox
+                                        checked={deleteHasSessionEdges}
+                                        onChange={handleCheckbox}
+                                        name='deleteHasSessionEdges'
                                         disabled={!hasPermission}
                                     />
                                 }

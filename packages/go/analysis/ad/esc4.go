@@ -18,12 +18,13 @@ package ad
 
 import (
 	"context"
-	"fmt"
+
 	"log/slog"
 	"sync"
 
 	"github.com/specterops/bloodhound/packages/go/analysis"
-	"github.com/specterops/bloodhound/packages/go/analysis/impact"
+	"github.com/specterops/bloodhound/packages/go/analysis/post"
+	"github.com/specterops/bloodhound/packages/go/bhlog/attr"
 	"github.com/specterops/bloodhound/packages/go/graphschema/ad"
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/graph"
@@ -33,7 +34,7 @@ import (
 	"github.com/specterops/dawgs/util/channels"
 )
 
-func PostADCSESC4(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob, groupExpansions impact.PathAggregator, enterpriseCA *graph.Node, targetDomains *graph.NodeSet, cache ADCSCache) error {
+func PostADCSESC4(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob, localGroupData *LocalGroupData, enterpriseCA *graph.Node, targetDomains *graph.NodeSet, cache ADCSCache) error {
 	// 1.
 	principals := cardinality.NewBitmap64()
 	publishedTemplates := cache.GetPublishedTemplateCache(enterpriseCA.ID)
@@ -41,17 +42,47 @@ func PostADCSESC4(ctx context.Context, tx graph.Transaction, outC chan<- analysi
 	// 2. iterate certtemplates that have an outbound `PublishedTo` edge to eca
 	for _, certTemplate := range publishedTemplates {
 		if principalsWithGenericWrite, err := FetchPrincipalsWithGenericWriteOnCertTemplate(tx, certTemplate); err != nil {
-			slog.WarnContext(ctx, fmt.Sprintf("Error fetching principals with %s on cert template: %v", ad.GenericWrite, err))
+			slog.WarnContext(
+				ctx,
+				"Error fetching principals with GenericWrite on cert template",
+				slog.Uint64("cert_template_id", uint64(certTemplate.ID)),
+				attr.Error(err),
+			)
 		} else if principalsWithEnrollOrAllExtendedRights, err := FetchPrincipalsWithEnrollOrAllExtendedRightsOnCertTemplate(tx, certTemplate); err != nil {
-			slog.WarnContext(ctx, fmt.Sprintf("Error fetching principals with %s or %s on cert template: %v", ad.Enroll, ad.AllExtendedRights, err))
+			slog.WarnContext(
+				ctx,
+				"Error fetching principals with Enroll or AllExtendedRights on cert template",
+				slog.Uint64("cert_template_id", uint64(certTemplate.ID)),
+				attr.Error(err),
+			)
 		} else if principalsWithPKINameFlag, err := FetchPrincipalsWithWritePKINameFlagOnCertTemplate(tx, certTemplate); err != nil {
-			slog.WarnContext(ctx, fmt.Sprintf("Error fetching principals with %s on cert template: %v", ad.WritePKINameFlag, err))
+			slog.WarnContext(
+				ctx,
+				"Error fetching principals with WritePKINameFlag on cert template",
+				slog.Uint64("cert_template_id", uint64(certTemplate.ID)),
+				attr.Error(err),
+			)
 		} else if principalsWithPKIEnrollmentFlag, err := FetchPrincipalsWithWritePKIEnrollmentFlagOnCertTemplate(tx, certTemplate); err != nil {
-			slog.WarnContext(ctx, fmt.Sprintf("Error fetching principals with %s on cert template: %v", ad.WritePKIEnrollmentFlag, err))
+			slog.WarnContext(
+				ctx,
+				"Error fetching principals with WritePKIEnrollmentFlag on cert template",
+				slog.Uint64("cert_template_id", uint64(certTemplate.ID)),
+				attr.Error(err),
+			)
 		} else if enrolleeSuppliesSubject, err := certTemplate.Properties.Get(string(ad.EnrolleeSuppliesSubject)).Bool(); err != nil {
-			slog.WarnContext(ctx, fmt.Sprintf("Error fetching %s property on cert template: %v", ad.EnrolleeSuppliesSubject, err))
+			slog.WarnContext(
+				ctx,
+				"Error fetching EnrolleeSuppliesSubject property on cert template",
+				slog.Uint64("cert_template_id", uint64(certTemplate.ID)),
+				attr.Error(err),
+			)
 		} else if requiresManagerApproval, err := certTemplate.Properties.Get(string(ad.RequiresManagerApproval)).Bool(); err != nil {
-			slog.WarnContext(ctx, fmt.Sprintf("Error fetching %s property on cert template: %v", ad.RequiresManagerApproval, err))
+			slog.WarnContext(
+				ctx,
+				"Error fetching RequiresManagerApproval property on cert template",
+				slog.Uint64("cert_template_id", uint64(certTemplate.ID)),
+				attr.Error(err),
+			)
 		} else {
 
 			var (
@@ -61,16 +92,16 @@ func PostADCSESC4(ctx context.Context, tx graph.Transaction, outC chan<- analysi
 
 			// 2a. principals that control the cert template
 			principals.Or(
-				CalculateCrossProductNodeSets(tx,
-					groupExpansions,
+				CalculateCrossProductNodeSets(
+					localGroupData,
 					enterpriseCAEnrollers,
 					certTemplateControllers,
 				))
 
 			// 2b. principals with `Enroll/AllExtendedRights` + `Generic Write` combination on the cert template
 			principals.Or(
-				CalculateCrossProductNodeSets(tx,
-					groupExpansions,
+				CalculateCrossProductNodeSets(
+					localGroupData,
 					enterpriseCAEnrollers,
 					principalsWithGenericWrite.Slice(),
 					principalsWithEnrollOrAllExtendedRights.Slice(),
@@ -79,15 +110,20 @@ func PostADCSESC4(ctx context.Context, tx graph.Transaction, outC chan<- analysi
 
 			// 2c. kick out early if cert template does meet conditions for ESC4
 			if valid, err := isCertTemplateValidForESC4(certTemplate); err != nil {
-				slog.WarnContext(ctx, fmt.Sprintf("Error validating cert template %d: %v", certTemplate.ID, err))
+				slog.WarnContext(
+					ctx,
+					"Error validating cert template",
+					slog.Uint64("cert_template_id", uint64(certTemplate.ID)),
+					attr.Error(err),
+				)
 				continue
 			} else if !valid {
 				continue
 			}
 
 			// 2d. principals with `Enroll/AllExtendedRights` + `WritePKINameFlag` + `WritePKIEnrollmentFlag` on the cert template
-			principals.Or(CalculateCrossProductNodeSets(tx,
-				groupExpansions,
+			principals.Or(CalculateCrossProductNodeSets(
+				localGroupData,
 				enterpriseCAEnrollers,
 				principalsWithEnrollOrAllExtendedRights.Slice(),
 				principalsWithPKINameFlag.Slice(),
@@ -97,8 +133,8 @@ func PostADCSESC4(ctx context.Context, tx graph.Transaction, outC chan<- analysi
 			// 2e.
 			if enrolleeSuppliesSubject {
 				principals.Or(
-					CalculateCrossProductNodeSets(tx,
-						groupExpansions,
+					CalculateCrossProductNodeSets(
+						localGroupData,
 						enterpriseCAEnrollers,
 						principalsWithEnrollOrAllExtendedRights.Slice(),
 						principalsWithPKIEnrollmentFlag.Slice(),
@@ -109,8 +145,8 @@ func PostADCSESC4(ctx context.Context, tx graph.Transaction, outC chan<- analysi
 			// 2f.
 			if !requiresManagerApproval {
 				principals.Or(
-					CalculateCrossProductNodeSets(tx,
-						groupExpansions,
+					CalculateCrossProductNodeSets(
+						localGroupData,
 						enterpriseCAEnrollers,
 						principalsWithEnrollOrAllExtendedRights.Slice(),
 						principalsWithPKINameFlag.Slice(),
@@ -122,7 +158,7 @@ func PostADCSESC4(ctx context.Context, tx graph.Transaction, outC chan<- analysi
 
 	principals.Each(func(value uint64) bool {
 		for _, domain := range targetDomains.Slice() {
-			channels.Submit(ctx, outC, analysis.CreatePostRelationshipJob{
+			channels.Submit(ctx, outC, post.EnsureRelationshipJob{
 				FromID: graph.ID(value),
 				ToID:   domain.ID,
 				Kind:   ad.ADCSESC4,

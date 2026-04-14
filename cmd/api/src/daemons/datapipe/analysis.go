@@ -30,7 +30,7 @@ import (
 	"github.com/specterops/bloodhound/cmd/api/src/services/agi"
 	"github.com/specterops/bloodhound/cmd/api/src/services/dataquality"
 	"github.com/specterops/bloodhound/packages/go/analysis"
-	adAnalysis "github.com/specterops/bloodhound/packages/go/analysis/ad"
+	"github.com/specterops/bloodhound/packages/go/bhlog/attr"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -47,29 +47,12 @@ func RunAnalysisOperations(ctx context.Context, db database.Database, graphDB gr
 		tieringEnabled       = appcfg.GetTieringEnabled(ctx, db)
 	)
 
-	if err := adAnalysis.FixWellKnownNodeTypes(ctx, graphDB); err != nil {
-		collectedErrors = append(collectedErrors, fmt.Errorf("fix well known node types failed: %w", err))
-	}
-
-	if err := adAnalysis.RunDomainAssociations(ctx, graphDB); err != nil {
-		collectedErrors = append(collectedErrors, fmt.Errorf("domain association and pruning failed: %w", err))
-	}
-
-	if err := adAnalysis.LinkWellKnownNodes(ctx, graphDB); err != nil {
-		collectedErrors = append(collectedErrors, fmt.Errorf("well known group linking failed: %w", err))
-	}
-
-	if errs := TagAssetGroupsAndTierZero(ctx, db, graphDB); len(errs) > 0 {
-		for _, err := range errs {
-			collectedErrors = append(collectedErrors, fmt.Errorf("tagging asset groups and tier zero failed: %w", err))
-		}
-	}
-
 	var (
-		adFailed          = false
-		azureFailed       = false
-		agiFailed         = false
-		dataQualityFailed = false
+		adFailed           = false
+		azureFailed        = false
+		agiFailed          = false
+		agtPartiallyFailed = false
+		dataQualityFailed  = false
 	)
 
 	// TODO: Cleanup #ADCSFeatureFlag after full launch.
@@ -91,8 +74,18 @@ func RunAnalysisOperations(ctx context.Context, db database.Database, graphDB gr
 		stats.LogStats()
 	}
 
+	if errs := TagAssetGroupsAndTierZero(ctx, db, graphDB); len(errs) > 0 {
+		for _, err := range errs {
+			collectedErrors = append(collectedErrors, fmt.Errorf("tagging asset groups and tier zero failed: %w", err))
+		}
+
+		if ContainsOnlyCypherSelectorErrors(errs) {
+			agtPartiallyFailed = true
+		}
+	}
+
 	if !tieringEnabled {
-		if err := agi.RunAssetGroupIsolationCollections(ctx, db, graphDB); err != nil {
+		if err := agi.RunAssetGroupIsolationCollections(ctx, db, graphDB, analysis.GetNodeKindDisplayLabel); err != nil {
 			collectedErrors = append(collectedErrors, fmt.Errorf("asset group isolation collection failed: %w", err))
 			agiFailed = true
 		}
@@ -105,13 +98,13 @@ func RunAnalysisOperations(ctx context.Context, db database.Database, graphDB gr
 
 	if len(collectedErrors) > 0 {
 		for _, err := range collectedErrors {
-			slog.ErrorContext(ctx, fmt.Sprintf("Analysis error encountered: %v", err))
+			slog.ErrorContext(ctx, "Analysis error encountered", attr.Error(err))
 		}
 	}
 
 	if adFailed && azureFailed && agiFailed && dataQualityFailed {
 		return ErrAnalysisFailed
-	} else if adFailed || azureFailed || agiFailed || dataQualityFailed {
+	} else if adFailed || azureFailed || agiFailed || agtPartiallyFailed || dataQualityFailed {
 		return ErrAnalysisPartiallyCompleted
 	}
 

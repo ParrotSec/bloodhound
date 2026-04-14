@@ -15,7 +15,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build integration
-// +build integration
 
 package ad_test
 
@@ -25,7 +24,7 @@ import (
 
 	"github.com/specterops/bloodhound/packages/go/analysis"
 	ad2 "github.com/specterops/bloodhound/packages/go/analysis/ad"
-	"github.com/specterops/bloodhound/packages/go/analysis/impact"
+	"github.com/specterops/bloodhound/packages/go/analysis/post"
 	"github.com/specterops/bloodhound/packages/go/graphschema"
 
 	"github.com/specterops/dawgs/ops"
@@ -40,8 +39,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func FetchADCSPrereqs(db graph.Database) (impact.PathAggregator, []*graph.Node, []*graph.Node, []*graph.Node, ad2.ADCSCache, error) {
-	if expansions, err := ad2.ExpandAllRDPLocalGroups(context.Background(), db); err != nil {
+func FetchADCSPrereqs(db graph.Database) (*ad2.LocalGroupData, []*graph.Node, []*graph.Node, []*graph.Node, ad2.ADCSCache, error) {
+	if localGroupData, err := ad2.FetchLocalGroupData(context.Background(), db); err != nil {
 		return nil, nil, nil, nil, ad2.ADCSCache{}, err
 	} else {
 		cache := ad2.NewADCSCache()
@@ -51,7 +50,7 @@ func FetchADCSPrereqs(db graph.Database) (impact.PathAggregator, []*graph.Node, 
 			return nil, nil, nil, nil, ad2.ADCSCache{}, err
 		} else {
 			cache.BuildCache(context.Background(), db, enterpriseCertAuthorities, certTemplates)
-			return expansions, cache.GetEnterpriseCertAuthorities(), cache.GetCertTemplates(), cache.GetDomains(), cache, nil
+			return localGroupData, cache.GetEnterpriseCertAuthorities(), cache.GetCertTemplates(), cache.GetDomains(), cache, nil
 		}
 	}
 }
@@ -65,7 +64,7 @@ func TestADCSESC1(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC1")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -79,8 +78,8 @@ func TestADCSESC1(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC1(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC1(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC1.String(), err)
 					}
 					return nil
@@ -179,7 +178,7 @@ func TestADCSESC1(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC1 Authenticated Users")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -193,8 +192,8 @@ func TestADCSESC1(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC1(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC1(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC1.String(), err)
 					}
 					return nil
@@ -244,7 +243,7 @@ func TestGoldenCert(t *testing.T) {
 				}
 			}
 
-			operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
+			operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
 				if err := ad2.PostGoldenCert(ctx, tx, outC, innerEnterpriseCA, targetDomains); err != nil {
 					t.Logf("failed post processing for %s: %v", ad.GoldenCert.String(), err)
 				}
@@ -501,19 +500,19 @@ func TestEnrollOnBehalfOf(t *testing.T) {
 
 				require.Len(t, results, 3)
 
-				require.Contains(t, results, analysis.CreatePostRelationshipJob{
+				require.Contains(t, results, post.EnsureRelationshipJob{
 					FromID: harness.EnrollOnBehalfOfHarness1.CertTemplate11.ID,
 					ToID:   harness.EnrollOnBehalfOfHarness1.CertTemplate12.ID,
 					Kind:   ad.EnrollOnBehalfOf,
 				})
 
-				require.Contains(t, results, analysis.CreatePostRelationshipJob{
+				require.Contains(t, results, post.EnsureRelationshipJob{
 					FromID: harness.EnrollOnBehalfOfHarness1.CertTemplate13.ID,
 					ToID:   harness.EnrollOnBehalfOfHarness1.CertTemplate12.ID,
 					Kind:   ad.EnrollOnBehalfOf,
 				})
 
-				require.Contains(t, results, analysis.CreatePostRelationshipJob{
+				require.Contains(t, results, post.EnsureRelationshipJob{
 					FromID: harness.EnrollOnBehalfOfHarness1.CertTemplate12.ID,
 					ToID:   harness.EnrollOnBehalfOfHarness1.CertTemplate12.ID,
 					Kind:   ad.EnrollOnBehalfOf,
@@ -568,7 +567,7 @@ func TestEnrollOnBehalfOf(t *testing.T) {
 				require.Nil(t, err)
 
 				require.Len(t, results, 1)
-				require.Contains(t, results, analysis.CreatePostRelationshipJob{
+				require.Contains(t, results, post.EnsureRelationshipJob{
 					FromID: harness.EnrollOnBehalfOfHarness2.CertTemplate21.ID,
 					ToID:   harness.EnrollOnBehalfOfHarness2.CertTemplate23.ID,
 					Kind:   ad.EnrollOnBehalfOf,
@@ -629,7 +628,7 @@ func TestADCSESC3(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC3")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -643,8 +642,8 @@ func TestADCSESC3(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC3(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC3(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC3.String(), err)
 					}
 					return nil
@@ -680,7 +679,7 @@ func TestADCSESC3(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC3")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -694,8 +693,8 @@ func TestADCSESC3(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC3(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC3(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC3.String(), err)
 					}
 					return nil
@@ -743,7 +742,7 @@ func TestADCSESC3(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC3")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -757,8 +756,8 @@ func TestADCSESC3(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC3(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC3(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC3.String(), err)
 					}
 					return nil
@@ -805,7 +804,7 @@ func TestADCSESC4(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC4 template 1")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -819,8 +818,8 @@ func TestADCSESC4(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC4(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC4(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC4.String(), err)
 					}
 					return nil
@@ -870,7 +869,7 @@ func TestADCSESC4(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC4 template 2")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -884,8 +883,8 @@ func TestADCSESC4(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC4(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC4(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC4.String(), err)
 					}
 					return nil
@@ -940,7 +939,7 @@ func TestADCSESC4(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC4 template 3")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -954,8 +953,8 @@ func TestADCSESC4(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC4(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC4(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC4.String(), err)
 					}
 					return nil
@@ -991,7 +990,7 @@ func TestADCSESC4(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC4 template 4")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1005,8 +1004,8 @@ func TestADCSESC4(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC4(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC4(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC4.String(), err)
 					}
 					return nil
@@ -1046,7 +1045,7 @@ func TestADCSESC4Composition(t *testing.T) {
 	}, func(harness integration.HarnessDetails, db graph.Database) {
 		operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC4 template 1")
 
-		groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+		localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 		require.Nil(t, err)
 
 		for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1060,8 +1059,8 @@ func TestADCSESC4Composition(t *testing.T) {
 				}
 			}
 
-			operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-				if err := ad2.PostADCSESC4(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+			operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+				if err := ad2.PostADCSESC4(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 					t.Logf("failed post processing for %s: %v", ad.ADCSESC4.String(), err)
 				}
 				return nil
@@ -1271,7 +1270,7 @@ func TestADCSESC9a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1285,8 +1284,8 @@ func TestADCSESC9a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9a.String(), err)
 					}
 					return nil
@@ -1323,7 +1322,7 @@ func TestADCSESC9a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1337,8 +1336,8 @@ func TestADCSESC9a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9a.String(), err)
 					}
 					return nil
@@ -1372,7 +1371,7 @@ func TestADCSESC9a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1386,8 +1385,8 @@ func TestADCSESC9a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9a.String(), err)
 					}
 					return nil
@@ -1422,7 +1421,7 @@ func TestADCSESC9a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1436,8 +1435,8 @@ func TestADCSESC9a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9a.String(), err)
 					}
 					return nil
@@ -1472,7 +1471,7 @@ func TestADCSESC9a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1486,8 +1485,8 @@ func TestADCSESC9a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9a.String(), err)
 					}
 					return nil
@@ -1520,7 +1519,7 @@ func TestADCSESC9a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1534,8 +1533,8 @@ func TestADCSESC9a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9a.String(), err)
 					}
 					return nil
@@ -1595,7 +1594,7 @@ func TestADCSESC9a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1609,8 +1608,8 @@ func TestADCSESC9a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9a.String(), err)
 					}
 					return nil
@@ -1645,7 +1644,7 @@ func TestADCSESC9a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1659,8 +1658,8 @@ func TestADCSESC9a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9a.String(), err)
 					}
 					return nil
@@ -1692,7 +1691,7 @@ func TestADCSESC9a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9A Authenticated Users")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1706,8 +1705,8 @@ func TestADCSESC9a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9a.String(), err)
 					}
 					return nil
@@ -1746,7 +1745,7 @@ func TestADCSESC9b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1760,8 +1759,8 @@ func TestADCSESC9b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9b.String(), err)
 					}
 					return nil
@@ -1798,7 +1797,7 @@ func TestADCSESC9b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1812,8 +1811,8 @@ func TestADCSESC9b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9b.String(), err)
 					}
 					return nil
@@ -1846,7 +1845,7 @@ func TestADCSESC9b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1860,8 +1859,8 @@ func TestADCSESC9b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9b.String(), err)
 					}
 					return nil
@@ -1895,7 +1894,7 @@ func TestADCSESC9b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1909,8 +1908,8 @@ func TestADCSESC9b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9b.String(), err)
 					}
 					return nil
@@ -1944,7 +1943,7 @@ func TestADCSESC9b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -1958,8 +1957,8 @@ func TestADCSESC9b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9b.String(), err)
 					}
 					return nil
@@ -2023,7 +2022,7 @@ func TestADCSESC9b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2037,8 +2036,8 @@ func TestADCSESC9b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9b.String(), err)
 					}
 					return nil
@@ -2073,7 +2072,7 @@ func TestADCSESC9b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC9b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2087,8 +2086,8 @@ func TestADCSESC9b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC9b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC9b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC9b.String(), err)
 					}
 					return nil
@@ -2122,7 +2121,7 @@ func TestADCSESC6a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC6a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2136,8 +2135,8 @@ func TestADCSESC6a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC6a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC6a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC6a.String(), err)
 					}
 					return nil
@@ -2171,7 +2170,7 @@ func TestADCSESC6a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC6a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2185,8 +2184,8 @@ func TestADCSESC6a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC6a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC6a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC6a.String(), err)
 					}
 					return nil
@@ -2219,7 +2218,7 @@ func TestADCSESC6a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC6a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2233,8 +2232,8 @@ func TestADCSESC6a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC6a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC6a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC6a.String(), err)
 					}
 					return nil
@@ -2321,7 +2320,7 @@ func TestADCSESC6a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC6a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2335,8 +2334,8 @@ func TestADCSESC6a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC6a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC6a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC6a.String(), err)
 					}
 					return nil
@@ -2375,7 +2374,7 @@ func TestADCSESC6b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC6b template 1")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2389,8 +2388,8 @@ func TestADCSESC6b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC6b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC6b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC6b.String(), err)
 					}
 					return nil
@@ -2479,7 +2478,7 @@ func TestADCSESC6b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC6b eca")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2493,8 +2492,8 @@ func TestADCSESC6b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC6b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC6b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC6b.String(), err)
 					}
 					return nil
@@ -2528,7 +2527,7 @@ func TestADCSESC6b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC6b principal edges")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2542,8 +2541,8 @@ func TestADCSESC6b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC6b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC6b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC6b.String(), err)
 					}
 					return nil
@@ -2577,7 +2576,7 @@ func TestADCSESC6b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC6b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2591,8 +2590,8 @@ func TestADCSESC6b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC6b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC6b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC6b.String(), err)
 					}
 					return nil
@@ -2632,7 +2631,7 @@ func TestADCSESC6b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC6b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2646,8 +2645,8 @@ func TestADCSESC6b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC6b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC6b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC6b.String(), err)
 					}
 					return nil
@@ -2681,7 +2680,7 @@ func TestADCSESC6b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC6b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2695,8 +2694,8 @@ func TestADCSESC6b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC6b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC6b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC6b.String(), err)
 					}
 					return nil
@@ -2730,7 +2729,7 @@ func TestADCSESC10a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2744,8 +2743,8 @@ func TestADCSESC10a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10a.String(), err)
 					}
 					return nil
@@ -2783,7 +2782,7 @@ func TestADCSESC10a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2797,8 +2796,8 @@ func TestADCSESC10a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10a.String(), err)
 					}
 					return nil
@@ -2833,7 +2832,7 @@ func TestADCSESC10a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2847,8 +2846,8 @@ func TestADCSESC10a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10a.String(), err)
 					}
 					return nil
@@ -2884,7 +2883,7 @@ func TestADCSESC10a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2898,8 +2897,8 @@ func TestADCSESC10a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10a.String(), err)
 					}
 					return nil
@@ -2964,7 +2963,7 @@ func TestADCSESC10a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -2978,8 +2977,8 @@ func TestADCSESC10a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10a.String(), err)
 					}
 					return nil
@@ -3013,7 +3012,7 @@ func TestADCSESC10a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3027,8 +3026,8 @@ func TestADCSESC10a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10a.String(), err)
 					}
 					return nil
@@ -3062,7 +3061,7 @@ func TestADCSESC10a(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10a")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3076,8 +3075,8 @@ func TestADCSESC10a(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10a(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10a(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10a.String(), err)
 					}
 					return nil
@@ -3111,7 +3110,7 @@ func TestADCSESC13(t *testing.T) {
 			return nil
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC13")
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3125,8 +3124,8 @@ func TestADCSESC13(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC13(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC13(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC13.String(), err)
 					} else {
 						return nil
@@ -3178,7 +3177,7 @@ func TestADCSESC13(t *testing.T) {
 			return nil
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC13")
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3192,8 +3191,8 @@ func TestADCSESC13(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC13(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC13(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC13.String(), err)
 					} else {
 						return nil
@@ -3250,7 +3249,7 @@ func TestADCSESC13(t *testing.T) {
 			return nil
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC13")
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3264,8 +3263,8 @@ func TestADCSESC13(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC13(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC13(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC13.String(), err)
 					} else {
 						return nil
@@ -3344,7 +3343,7 @@ func TestADCSESC10b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3358,8 +3357,8 @@ func TestADCSESC10b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10b.String(), err)
 					}
 					return nil
@@ -3395,7 +3394,7 @@ func TestADCSESC10b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3409,8 +3408,8 @@ func TestADCSESC10b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10b.String(), err)
 					}
 					return nil
@@ -3444,7 +3443,7 @@ func TestADCSESC10b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3458,8 +3457,8 @@ func TestADCSESC10b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10b.String(), err)
 					}
 					return nil
@@ -3493,7 +3492,7 @@ func TestADCSESC10b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3507,8 +3506,8 @@ func TestADCSESC10b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10b.String(), err)
 					}
 					return nil
@@ -3574,7 +3573,7 @@ func TestADCSESC10b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3588,8 +3587,8 @@ func TestADCSESC10b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10b.String(), err)
 					}
 					return nil
@@ -3623,7 +3622,7 @@ func TestADCSESC10b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3637,8 +3636,8 @@ func TestADCSESC10b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10b.String(), err)
 					}
 					return nil
@@ -3672,7 +3671,7 @@ func TestADCSESC10b(t *testing.T) {
 		}, func(harness integration.HarnessDetails, db graph.Database) {
 			operation := analysis.NewPostRelationshipOperation(context.Background(), db, "ADCS Post Process Test - ESC10b")
 
-			groupExpansions, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
+			localGroupData, enterpriseCertAuthorities, _, domains, cache, err := FetchADCSPrereqs(db)
 			require.Nil(t, err)
 
 			for _, enterpriseCA := range enterpriseCertAuthorities {
@@ -3686,8 +3685,8 @@ func TestADCSESC10b(t *testing.T) {
 					}
 				}
 
-				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob) error {
-					if err := ad2.PostADCSESC10b(ctx, tx, outC, groupExpansions, innerEnterpriseCA, targetDomains, cache); err != nil {
+				operation.Operation.SubmitReader(func(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob) error {
+					if err := ad2.PostADCSESC10b(ctx, tx, outC, localGroupData, innerEnterpriseCA, targetDomains, cache); err != nil {
 						t.Logf("failed post processing for %s: %v", ad.ADCSESC10b.String(), err)
 					}
 					return nil

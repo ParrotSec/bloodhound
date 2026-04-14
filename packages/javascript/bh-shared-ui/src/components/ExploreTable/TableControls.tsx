@@ -14,12 +14,13 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import { Input, InputProps } from '@bloodhoundenterprise/doodleui';
 import { faClose, faDownload, faExpand, faSearch } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { ColumnDef } from '@tanstack/react-table';
+import { Button, Input, InputProps } from 'doodle-ui';
 import { useMemo } from 'react';
 import { cn, formatPotentiallyUnknownLabel } from '../../utils';
+import { adaptClickHandlerToKeyDown } from '../../utils/adaptClickHandlerToKeyDown';
 import { ManageColumnsComboBox, ManageColumnsComboBoxOption } from './ManageColumnsComboBox/ManageColumnsComboBox';
 
 const ICON_CLASSES = 'cursor-pointer bg-slate-200 p-2 h-4 w-4 rounded-full dark:text-black';
@@ -36,6 +37,8 @@ type TableControlsProps<TData, TValue> = {
     onExpandClick?: () => void;
     onCloseClick?: () => void;
     onManageColumnsChange?: (columns: ManageColumnsComboBoxOption[]) => void;
+    onChangePinnedColumns?: (columns: string[]) => void;
+    onResetColumnSize?: () => void;
 };
 
 const TableControls = <TData, TValue>({
@@ -50,6 +53,8 @@ const TableControls = <TData, TValue>({
     onCloseClick,
     onExpandClick,
     onManageColumnsChange,
+    onChangePinnedColumns,
+    onResetColumnSize,
 }: TableControlsProps<TData, TValue>) => {
     const parsedColumns: ManageColumnsComboBoxOption[] = useMemo(
         () =>
@@ -92,12 +97,19 @@ const TableControls = <TData, TValue>({
                         aria-disabled={noResults}
                         onClick={onDownloadClick}
                         data-testid='download-button'
+                        aria-label='Download CSV'
                         className={cn({ [DISABLED_CLASSNAME]: noResults })}>
                         <FontAwesomeIcon className={ICON_CLASSES} icon={faDownload} />
                     </button>
                 )}
                 {onExpandClick && (
-                    <div onClick={onExpandClick} data-testid='expand-button'>
+                    <div
+                        role='button'
+                        tabIndex={0}
+                        onClick={onExpandClick}
+                        onKeyDown={adaptClickHandlerToKeyDown(onExpandClick)}
+                        data-testid='expand-button'
+                        aria-label='Expand table view'>
                         <FontAwesomeIcon className={ICON_CLASSES} icon={faExpand} />
                     </div>
                 )}
@@ -107,12 +119,19 @@ const TableControls = <TData, TValue>({
                         allColumns={parsedColumns}
                         selectedColumns={selectedColumns}
                         onChange={onManageColumnsChange}
+                        onChangePinnedColumns={onChangePinnedColumns}
+                        onResetColumnSize={onResetColumnSize}
                     />
                 )}
                 {onCloseClick && (
-                    <div onClick={onCloseClick} data-testid='close-button'>
+                    <Button
+                        variant='text'
+                        onClick={onCloseClick}
+                        onKeyDown={adaptClickHandlerToKeyDown(onCloseClick)}
+                        data-testid='close-button'
+                        aria-label='Close table view'>
                         <FontAwesomeIcon className={ICON_CLASSES} icon={faClose} />
-                    </div>
+                    </Button>
                 )}
             </div>
         </div>

@@ -50,7 +50,7 @@ func OpenDatabase(t *testing.T) database.Database {
 	} else if db, err := setupPGTestDB(t, cfg); err != nil {
 		t.Fatalf("Failed to setup pgtestdb: %v", err)
 	} else {
-		return database.NewBloodhoundDB(db, auth.NewIdentityResolver())
+		return database.NewBloodhoundDB(db, auth.NewIdentityResolver(), cfg)
 	}
 
 	return nil
@@ -136,6 +136,8 @@ func Prepare(ctx context.Context, db database.Database) error {
 		return fmt.Errorf("failed to clear database: %v", err)
 	} else if err := db.Migrate(ctx); err != nil {
 		return fmt.Errorf("failed to migrate database: %v", err)
+	} else if err := db.PopulateExtensionData(ctx); err != nil {
+		return fmt.Errorf("failed to populate extension data: %v", err)
 	}
 
 	return nil

@@ -21,6 +21,7 @@ import ExploreSearch from './ExploreSearch';
 
 import userEvent from '@testing-library/user-event';
 import { mockCodemirrorLayoutMethods } from 'bh-shared-ui';
+import { ConfigurationKey } from 'js-client-library';
 
 const comboboxLookaheadOptions = {
     data: [
@@ -36,6 +37,14 @@ const comboboxLookaheadOptions = {
         },
     ],
 };
+
+const setInitialServerState = (savedConfigurationValue?: boolean) => {
+    return {
+        isTimeoutLimitEnabled: savedConfigurationValue || false,
+    };
+};
+
+let serverState = setInitialServerState();
 
 const server = setupServer(
     rest.get('/api/v2/search', (req, res, ctx) => {
@@ -65,7 +74,10 @@ const server = setupServer(
     rest.get(`/api/v2/self`, async (req, res, ctx) => {
         return res(
             ctx.json({
-                data: { id: '4e09c965-65bd-4f15-ae71-5075a6fed14b', roles: ['Administrator'] },
+                data: {
+                    id: '4e09c965-65bd-4f15-ae71-5075a6fed14b',
+                    roles: [{ name: 'Administrator', permissions: [] }],
+                },
             })
         );
     }),
@@ -82,11 +94,28 @@ const server = setupServer(
                 data: [],
             })
         );
+    }),
+    rest.get(`/api/v2/config`, async (_req, res, ctx) => {
+        return res(
+            ctx.json({
+                data: [
+                    {
+                        key: ConfigurationKey.TimeoutLimit,
+                        value: {
+                            enabled: serverState.isTimeoutLimitEnabled,
+                        },
+                    },
+                ],
+            })
+        );
     })
 );
 
 beforeAll(() => server.listen());
-beforeEach(() => mockCodemirrorLayoutMethods());
+beforeEach(() => {
+    mockCodemirrorLayoutMethods();
+    serverState = setInitialServerState();
+});
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
@@ -120,8 +149,8 @@ describe('ExploreSearch rendering per tab', async () => {
         expect(screen.getByLabelText(/start node/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/destination node/i)).toBeInTheDocument();
 
-        expect(screen.getByRole('button', { name: /right-left/i })).toBeDisabled();
-        expect(screen.getByRole('button', { name: /filter/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Swap start and destination/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Show pathfinding filter options/i })).toBeInTheDocument();
     });
 
     it('should render the cypher search controls when user clicks on cypher tab ', async () => {
@@ -129,8 +158,8 @@ describe('ExploreSearch rendering per tab', async () => {
 
         expect(screen.getByText(/cypher query/i)).toBeInTheDocument();
 
-        expect(screen.getByRole('link', { name: /app-icon-info/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /run/i })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /Learn more about cypher/i })).toBeInTheDocument();
+        expect(screen.getByLabelText('Run cypher query')).toBeInTheDocument();
     });
     // To do: Work on this when TW css classes are applied in test environment
     it.todo('should hide/expand search widget when user clicks minus/plus button', async () => {
@@ -226,5 +255,16 @@ describe('ExploreSearch interaction', () => {
 
         const searchInput = screen.getByPlaceholderText('Search Nodes');
         expect(searchInput).toHaveValue('admin');
+    });
+
+    it('displays a “Disable query timeout” checkbox when timeout limit param config is enabled false', async () => {
+        await setup('cypher');
+        expect(await screen.findByRole('checkbox', { name: /Disable query timeout/i })).toBeInTheDocument();
+    });
+
+    it('does not display a “Disable query timeout” checkbox when timeout limit param config is enabled true', async () => {
+        serverState = setInitialServerState(true);
+        await setup('cypher');
+        expect(screen.queryByRole('checkbox', { name: /Disable query timeout/i })).not.toBeInTheDocument();
     });
 });

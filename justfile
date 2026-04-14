@@ -46,6 +46,7 @@ analyze *FLAGS:
 # Run tests
 test *FLAGS:
   @just stbernard test {{FLAGS}}
+  @just stbernard cover
 
 # Build application
 build *FLAGS:
@@ -83,6 +84,10 @@ build-js-client *ARGS="":
 build-shared-ui *ARGS="":
   @cd packages/javascript/bh-shared-ui && yarn build
 
+# build doodle-ui
+build-doodle-ui *ARGS="":
+  @cd packages/javascript/doodle-ui && yarn build
+
 # updates favicon.ico, logo192.png and logo512.png from logo.svg
 update-favicon:
   @just imagemagick convert -background none ./cmd/ui/public/logo-light.svg -define icon:auto-resize ./cmd/ui/public/favicon-light.ico
@@ -104,7 +109,6 @@ gen-spec:
 prune-my-branches nuclear='no':
   #!/usr/bin/env bash
   git branch --merged| egrep -v "(^\*|master|main|dev)" | xargs git branch -d
-  git reflog expire --expire=now --all && git gc --prune=now --aggressive
   git remote prune origin
   if [ "{{nuclear}}" == 'nuclear' ]; then
     echo Switching to main to remove orphans
@@ -173,9 +177,14 @@ run-bhce-container platform='linux/amd64' tag='custom' version='v5.0.0' *ARGS=''
 reset-node-modules:
   @cd packages/javascript/js-client-library && rm -r node_modules
   @cd packages/javascript/bh-shared-ui && rm -r node_modules
+  @cd packages/javascript/doodle-ui && rm -r node_modules
   @cd cmd/ui && rm -r node_modules
   @rm -r node_modules
   @just ensure-deps
+
+# View Architecture Diagrams
+view-architecture:
+  @npx -y likec4@1.48.0 start
 
 # Initialize your dev environment (use "just init clean" to reset your config files)
 init wipe="":
@@ -249,6 +258,7 @@ init wipe="":
 
   echo "Ensure containers have been rebuilt"
   if [[ "{{wipe}}" != "clean" ]]; then
+    just bh-dev pull
     just bh-dev build
   else
     echo "Clear volumes and rebuild without cache"

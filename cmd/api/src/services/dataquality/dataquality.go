@@ -14,7 +14,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-//go:generate go run go.uber.org/mock/mockgen -copyright_file=../../../../../LICENSE.header -destination=./mocks/mock.go -package=mocks . DataQualityData
 package dataquality
 
 import (
@@ -24,21 +23,28 @@ import (
 
 	"github.com/specterops/bloodhound/cmd/api/src/analysis/ad"
 	"github.com/specterops/bloodhound/cmd/api/src/analysis/azure"
-	"github.com/specterops/bloodhound/cmd/api/src/model"
+	"github.com/specterops/bloodhound/cmd/api/src/database"
+	"github.com/specterops/bloodhound/packages/go/bhlog/attr"
 	"github.com/specterops/bloodhound/packages/go/bhlog/measure"
 	"github.com/specterops/dawgs/graph"
 )
 
-type DataQualityData interface {
-	CreateADDataQualityStats(ctx context.Context, stats model.ADDataQualityStats) (model.ADDataQualityStats, error)
-	CreateADDataQualityAggregation(ctx context.Context, aggregation model.ADDataQualityAggregation) (model.ADDataQualityAggregation, error)
-	CreateAzureDataQualityStats(ctx context.Context, stats model.AzureDataQualityStats) (model.AzureDataQualityStats, error)
-	CreateAzureDataQualityAggregation(ctx context.Context, aggregation model.AzureDataQualityAggregation) (model.AzureDataQualityAggregation, error)
-}
-
-func SaveDataQuality(ctx context.Context, db DataQualityData, graphDB graph.Database) error {
-	slog.InfoContext(ctx, "Started Data Quality Stats Collection")
-	defer measure.ContextMeasure(ctx, slog.LevelInfo, "Successfully Completed Data Quality Stats Collection")()
+func SaveDataQuality(ctx context.Context, db database.DataQualityData, graphDB graph.Database) error {
+	slog.InfoContext(
+		ctx,
+		"Started Data Quality Stats Collection",
+		attr.Namespace("analysis"),
+		attr.Function("SaveDataQuality"),
+		attr.Scope("process"),
+	)
+	defer measure.ContextMeasure(
+		ctx,
+		slog.LevelInfo,
+		"Completed Data Quality Stats Collection",
+		attr.Namespace("analysis"),
+		attr.Function("SaveDataQuality"),
+		attr.Scope("process"),
+	)()
 
 	if stats, aggregation, err := ad.GraphStats(ctx, graphDB); err != nil {
 		return fmt.Errorf("could not get active directory data quality stats: %w", err)

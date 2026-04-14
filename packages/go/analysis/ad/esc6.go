@@ -18,14 +18,15 @@ package ad
 
 import (
 	"context"
-	"fmt"
+
 	"log/slog"
 	"sync"
 
+	"github.com/specterops/bloodhound/packages/go/analysis/post"
 	"github.com/specterops/bloodhound/packages/go/ein"
 
 	"github.com/specterops/bloodhound/packages/go/analysis"
-	"github.com/specterops/bloodhound/packages/go/analysis/impact"
+	"github.com/specterops/bloodhound/packages/go/bhlog/attr"
 	"github.com/specterops/bloodhound/packages/go/graphschema/ad"
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/graph"
@@ -35,7 +36,7 @@ import (
 	"github.com/specterops/dawgs/util/channels"
 )
 
-func PostADCSESC6a(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob, groupExpansions impact.PathAggregator, enterpriseCA *graph.Node, targetDomains *graph.NodeSet, cache ADCSCache) error {
+func PostADCSESC6a(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob, localGroupData *LocalGroupData, enterpriseCA *graph.Node, targetDomains *graph.NodeSet, cache ADCSCache) error {
 	if isUserSpecifiesSanEnabledCollected, err := enterpriseCA.Properties.Get(ad.IsUserSpecifiesSanEnabledCollected.String()).Bool(); err != nil {
 		return err
 	} else if !isUserSpecifiesSanEnabledCollected {
@@ -52,20 +53,30 @@ func PostADCSESC6a(ctx context.Context, tx graph.Transaction, outC chan<- analys
 		for _, publishedCertTemplate := range publishedCertTemplates {
 
 			if valid, err := isCertTemplateValidForESC6(publishedCertTemplate, false); err != nil {
-				slog.WarnContext(ctx, fmt.Sprintf("Error validating cert template %d: %v", publishedCertTemplate.ID, err))
+				slog.WarnContext(
+					ctx,
+					"Error validating cert template",
+					slog.Uint64("published_cert_template_id", uint64(publishedCertTemplate.ID)),
+					attr.Error(err),
+				)
 				continue
 			} else if !valid {
 				continue
 			} else {
-				enrollers := CalculateCrossProductNodeSets(tx, groupExpansions, cache.GetCertTemplateEnrollers(publishedCertTemplate.ID), enterpriseCAEnrollers)
+				enrollers := CalculateCrossProductNodeSets(localGroupData, cache.GetCertTemplateEnrollers(publishedCertTemplate.ID), enterpriseCAEnrollers)
 
 				if filteredEnrollers, err := filterUserDNSResults(tx, enrollers, publishedCertTemplate); err != nil {
-					slog.WarnContext(ctx, fmt.Sprintf("Error filtering users in ESC6a: %v", err))
+					slog.WarnContext(
+						ctx,
+						"Error filtering users in ESC6a",
+						slog.Uint64("published_cert_template_id", uint64(publishedCertTemplate.ID)),
+						attr.Error(err),
+					)
 					continue
 				} else {
 					filteredEnrollers.Each(func(value uint64) bool {
 						for _, domain := range targetDomains.Slice() {
-							channels.Submit(ctx, outC, analysis.CreatePostRelationshipJob{
+							channels.Submit(ctx, outC, post.EnsureRelationshipJob{
 								FromID: graph.ID(value),
 								ToID:   domain.ID,
 								Kind:   ad.ADCSESC6a,
@@ -80,7 +91,7 @@ func PostADCSESC6a(ctx context.Context, tx graph.Transaction, outC chan<- analys
 	return nil
 }
 
-func PostADCSESC6b(ctx context.Context, tx graph.Transaction, outC chan<- analysis.CreatePostRelationshipJob, groupExpansions impact.PathAggregator, enterpriseCA *graph.Node, targetDomains *graph.NodeSet, cache ADCSCache) error {
+func PostADCSESC6b(ctx context.Context, tx graph.Transaction, outC chan<- post.EnsureRelationshipJob, localGroupData *LocalGroupData, enterpriseCA *graph.Node, targetDomains *graph.NodeSet, cache ADCSCache) error {
 	if isUserSpecifiesSanEnabledCollected, err := enterpriseCA.Properties.Get(ad.IsUserSpecifiesSanEnabledCollected.String()).Bool(); err != nil {
 		return err
 	} else if !isUserSpecifiesSanEnabledCollected {
@@ -97,21 +108,31 @@ func PostADCSESC6b(ctx context.Context, tx graph.Transaction, outC chan<- analys
 		for _, publishedCertTemplate := range publishedCertTemplates {
 
 			if valid, err := isCertTemplateValidForESC6(publishedCertTemplate, true); err != nil {
-				slog.WarnContext(ctx, fmt.Sprintf("Error validating cert template %d: %v", publishedCertTemplate.ID, err))
+				slog.WarnContext(
+					ctx,
+					"Error validating cert template",
+					slog.Uint64("published_cert_template_id", uint64(publishedCertTemplate.ID)),
+					attr.Error(err),
+				)
 				continue
 			} else if !valid {
 				continue
 			} else {
-				enrollers := CalculateCrossProductNodeSets(tx, groupExpansions, cache.GetCertTemplateEnrollers(publishedCertTemplate.ID), enterpriseCAEnrollers)
+				enrollers := CalculateCrossProductNodeSets(localGroupData, cache.GetCertTemplateEnrollers(publishedCertTemplate.ID), enterpriseCAEnrollers)
 
 				if filteredEnrollers, err := filterUserDNSResults(tx, enrollers, publishedCertTemplate); err != nil {
-					slog.WarnContext(ctx, fmt.Sprintf("Error filtering users in ESC6b: %v", err))
+					slog.WarnContext(
+						ctx,
+						"Error filtering users in ESC6b",
+						slog.Uint64("published_cert_template_id", uint64(publishedCertTemplate.ID)),
+						attr.Error(err),
+					)
 					continue
 				} else {
 					filteredEnrollers.Each(func(value uint64) bool {
 						for _, domain := range targetDomains.Slice() {
 							if cache.HasUPNCertMappingInForest(domain.ID.Uint64()) {
-								channels.Submit(ctx, outC, analysis.CreatePostRelationshipJob{
+								channels.Submit(ctx, outC, post.EnsureRelationshipJob{
 									FromID: graph.ID(value),
 									ToID:   domain.ID,
 									Kind:   ad.ADCSESC6b,

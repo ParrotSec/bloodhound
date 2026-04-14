@@ -26,7 +26,9 @@ Properties: [...types.#StringEnum]
 NodeKinds: [...types.#Kind]
 RelationshipKinds: [...types.#Kind]
 ACLRelationships: [...types.#Kind]
+IngestACLRelationships: [...types.#Kind]
 PathfindingRelationships: [...types.#Kind]
+PathfindingRelationshipsMatchFrontend: [...types.#Kind]
 InboundRelationshipKinds: [...types.#Kind]
 OutboundRelationshipKinds: [...types.#Kind]
 EdgeCompositionRelationships: [...types.#Kind]
@@ -1636,9 +1638,10 @@ ADCSESC13: types.#Kind & {
 	schema: "active_directory"
 }
 
-SyncedToEntraUser: types.#Kind & {
-	symbol: "SyncedToEntraUser"
-	schema: "active_directory"
+SyncedToADUser: types.#Kind & {
+	symbol:			"SyncedToADUser"
+	schema:			"active_directory"
+	representation:	"SyncedToADUser"
 }
 
 CoerceAndRelayNTLMToSMB: types.#Kind & {
@@ -1788,7 +1791,7 @@ RelationshipKinds: [
 	ADCSESC10a,
 	ADCSESC10b,
 	ADCSESC13,
-	SyncedToEntraUser,
+	SyncedToADUser,
 	CoerceAndRelayNTLMToSMB,
 	CoerceAndRelayNTLMToADCS,
 	WriteOwnerLimitedRights,
@@ -1838,6 +1841,8 @@ ACLRelationships: [
 	OwnsLimitedRights,
 ]
 
+IngestACLRelationships: [for r in ACLRelationships if !list.Contains(PostProcessedRelationships, r) {r}],
+
 // these edges are common to inbound/outbound/pathfinding
 SharedRelationshipKinds: [
 	Owns,
@@ -1882,7 +1887,7 @@ SharedRelationshipKinds: [
 	ADCSESC10a,
 	ADCSESC10b,
 	ADCSESC13,
-	SyncedToEntraUser,
+	SyncedToADUser,
 	CoerceAndRelayNTLMToSMB,
 	CoerceAndRelayNTLMToADCS,
 	WriteOwnerLimitedRights,
@@ -1907,6 +1912,10 @@ OutboundRelationshipKinds: list.Concat([SharedRelationshipKinds,[Contains, DCFor
 
 // Edges that are used in pathfinding
 PathfindingRelationships: list.Concat([SharedRelationshipKinds,[Contains, DCFor, SameForestTrust, SpoofSIDHistory, AbuseTGTDelegation]])
+
+// Edges that are used in Shortest Path and match the frontend's list of traversable edges
+PathfindingRelationshipsMatchFrontend: list.Concat([[for r in PathfindingRelationships if !list.Contains([ContainsIdentity, PropagatesACEsTo, GPOAppliesTo, CanApplyGPO], r) {r}], [ProtectAdminGroups]]),
+
 
 EdgeCompositionRelationships: [
 	GoldenCert,
@@ -1951,7 +1960,7 @@ PostProcessedRelationships: [
 	ADCSESC9b,
 	ADCSESC13,
 	EnrollOnBehalfOf,
-	SyncedToEntraUser,
+	SyncedToADUser,
 	Owns,
 	WriteOwner,
 	ExtendedByPolicy,

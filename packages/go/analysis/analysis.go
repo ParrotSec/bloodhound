@@ -25,7 +25,6 @@ import (
 	"github.com/specterops/bloodhound/packages/go/graphschema/ad"
 	"github.com/specterops/bloodhound/packages/go/graphschema/azure"
 	"github.com/specterops/bloodhound/packages/go/graphschema/common"
-	"github.com/specterops/bloodhound/packages/go/slicesext"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/ops"
 	"github.com/specterops/dawgs/query"
@@ -52,12 +51,13 @@ func NewCompositionCounter() CompositionCounter {
 	}
 }
 
-func GetNodeKindDisplayLabel(node *graph.Node) string {
-	return GetNodeKind(node).String()
+func GetNodeKindDisplayLabel(validPrimaryKinds graphschema.ValidPrimaryKinds, node *graph.Node) string {
+	return GetNodeKind(validPrimaryKinds, node).String()
 }
 
-func GetNodeKind(node *graph.Node) graph.Kind {
-	return graphschema.PrimaryNodeKind(node.Kinds)
+// GetNodeKind - returns the primary kind of the node.
+func GetNodeKind(validPrimaryKinds graphschema.ValidPrimaryKinds, node *graph.Node) graph.Kind {
+	return graphschema.PrimaryNodeKind(validPrimaryKinds, node.Kinds)
 }
 
 func ParseKind(rawKind string) (graph.Kind, error) {
@@ -70,18 +70,17 @@ func ParseKind(rawKind string) (graph.Kind, error) {
 	return nil, fmt.Errorf("unknown kind %s", rawKind)
 }
 
-func ParseKinds(rawKinds ...string) (graph.Kinds, error) {
-	if len(rawKinds) == 0 {
-		return graph.Kinds{ad.Entity, azure.Entity}, nil
-	}
-
-	return slicesext.MapWithErr(rawKinds, ParseKind)
-}
-
 func nodeByIndexedKindProperty(property, value string, kind graph.Kind) graph.Criteria {
 	return query.And(
 		query.Equals(query.NodeProperty(property), value),
 		query.Kind(query.Node(), kind),
+	)
+}
+
+func openGraphNodeByIndexedKindProperty(property, value string) graph.Criteria {
+	return query.And(
+		query.Equals(query.NodeProperty(property), value),
+		query.Not(query.Kind(query.Node(), ad.Entity, azure.Entity)),
 	)
 }
 
@@ -98,6 +97,17 @@ func FetchNodeByObjectID(tx graph.Transaction, objectID string) (*graph.Node, er
 	}
 
 	return tx.Nodes().Filter(nodeByIndexedKindProperty(common.ObjectID.String(), objectID, azure.Entity)).First()
+}
+
+func FetchNodeByObjectIDIncludeOpenGraph(tx graph.Transaction, objectID string) (*graph.Node, error) {
+	if node, err := FetchNodeByObjectID(tx, objectID); err != nil {
+		if !graph.IsErrNotFound(err) {
+			return nil, err
+		}
+	} else {
+		return node, nil
+	}
+	return tx.Nodes().Filter(openGraphNodeByIndexedKindProperty(common.ObjectID.String(), objectID)).First()
 }
 
 func FetchEdgeByStartAndEnd(ctx context.Context, graphDB graph.Database, start, end graph.ID, edgeKind graph.Kind) (*graph.Relationship, error) {

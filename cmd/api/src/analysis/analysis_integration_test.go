@@ -15,7 +15,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build integration
-// +build integration
 
 package analysis_test
 
@@ -34,17 +33,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func FetchCanRDPData(ctx context.Context, graphDB graph.Database) (*adAnalysis.CanRDPData, error) {
+	if localGroupData, err := adAnalysis.FetchLocalGroupData(ctx, graphDB); err != nil {
+		return nil, err
+	} else {
+		return localGroupData.FetchCanRDPData(ctx, graphDB)
+	}
+}
+
 func TestFetchRDPEnsureNoDescent(t *testing.T) {
 	testContext := integration.NewGraphTestContext(t, schema.DefaultGraphSchema())
 	testContext.DatabaseTestWithSetup(func(harness *integration.HarnessDetails) error {
 		harness.RDPB.Setup(testContext)
 		return nil
 	}, func(harness integration.HarnessDetails, db graph.Database) {
-		groupExpansions, err := adAnalysis.ExpandAllRDPLocalGroups(context.Background(), db)
+		canRDPData, err := FetchCanRDPData(context.Background(), db)
 		require.Nil(t, err)
 
 		require.Nil(t, db.ReadTransaction(context.Background(), func(tx graph.Transaction) error {
-			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchRemoteDesktopUsersBitmapForComputer(tx, harness.RDPB.Computer.ID, groupExpansions, false)
+			rdpComputerData, err := canRDPData.FetchCanRDPComputerData(tx, harness.RDPB.Computer.ID)
+			require.Nil(t, err)
+
+			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchCanRDPEntityBitmapForComputer(rdpComputerData, false, false)
 			require.Nil(t, err)
 
 			// We should expect all groups that have the RIL incoming privilege to the computer
@@ -57,18 +67,20 @@ func TestFetchRDPEnsureNoDescent(t *testing.T) {
 	})
 }
 
-func TestFetchRemoteDesktopUsersBitmapForComputer(t *testing.T) {
+func TestFetchCanRDPEntityBitmapForComputer(t *testing.T) {
 	testContext := integration.NewGraphTestContext(t, schema.DefaultGraphSchema())
 	testContext.DatabaseTestWithSetup(func(harness *integration.HarnessDetails) error {
 		harness.RDP.Setup(testContext)
 		return nil
 	}, func(harness integration.HarnessDetails, db graph.Database) {
-		groupExpansions, err := adAnalysis.ExpandAllRDPLocalGroups(context.Background(), db)
+		canRDPData, err := FetchCanRDPData(context.Background(), db)
 		require.Nil(t, err)
 
-		// Enforced URA validation
 		require.Nil(t, db.ReadTransaction(context.Background(), func(tx graph.Transaction) error {
-			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchRemoteDesktopUsersBitmapForComputer(tx, harness.RDP.Computer.ID, groupExpansions, true)
+			rdpComputerData, err := canRDPData.FetchCanRDPComputerData(tx, harness.RDP.Computer.ID)
+			require.Nil(t, err)
+
+			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchCanRDPEntityBitmapForComputer(rdpComputerData, true, false)
 			require.Nil(t, err)
 
 			// We should expect all entities that have the RIL incoming privilege to the computer
@@ -95,7 +107,10 @@ func TestFetchRemoteDesktopUsersBitmapForComputer(t *testing.T) {
 
 		// Unenforced URA validation. result set should only include first degree members of `Remote Desktop Users` group
 		require.Nil(t, db.ReadTransaction(context.Background(), func(tx graph.Transaction) error {
-			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchRemoteDesktopUsersBitmapForComputer(tx, harness.RDP.Computer.ID, groupExpansions, false)
+			rdpComputerData, err := canRDPData.FetchCanRDPComputerData(tx, harness.RDP.Computer.ID)
+			require.Nil(t, err)
+
+			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchCanRDPEntityBitmapForComputer(rdpComputerData, false, false)
 			require.Nil(t, err)
 
 			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDP.IrshadUser.ID.Uint64()))
@@ -124,12 +139,15 @@ func TestFetchRemoteDesktopUsersBitmapForComputer(t *testing.T) {
 		}))
 
 		// Recalculate group expansions
-		groupExpansions, err = adAnalysis.ExpandAllRDPLocalGroups(context.Background(), db)
+		canRDPData, err = FetchCanRDPData(context.Background(), db)
 		require.Nil(t, err)
 
 		// result set should only include first degree members of `Remote Desktop Users` group.
 		test.RequireNilErr(t, db.ReadTransaction(context.Background(), func(tx graph.Transaction) error {
-			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchRemoteDesktopUsersBitmapForComputer(tx, harness.RDP.Computer.ID, groupExpansions, true)
+			rdpComputerData, err := canRDPData.FetchCanRDPComputerData(tx, harness.RDP.Computer.ID)
+			require.Nil(t, err)
+
+			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchCanRDPEntityBitmapForComputer(rdpComputerData, false, false)
 			require.Nil(t, err)
 
 			require.Equal(t, 6, int(rdpEnabledEntityIDBitmap.Cardinality()))
@@ -146,18 +164,21 @@ func TestFetchRemoteDesktopUsersBitmapForComputer(t *testing.T) {
 	})
 }
 
-func TestFetchRDPEntityBitmapForComputer(t *testing.T) {
+func TestFetchCanRDPEntityBitmapForComputerWithCitrix(t *testing.T) {
 	testContext := integration.NewGraphTestContext(t, schema.DefaultGraphSchema())
 	testContext.DatabaseTestWithSetup(func(harness *integration.HarnessDetails) error {
 		harness.RDPHarnessWithCitrix.Setup(testContext)
 		return nil
 	}, func(harness integration.HarnessDetails, db graph.Database) {
-		groupExpansions, err := adAnalysis.ExpandAllRDPLocalGroups(context.Background(), db)
+		canRDPData, err := FetchCanRDPData(context.Background(), db)
 		require.Nil(t, err)
 
 		// the Remote Desktop Users group does not have an RIL(Remote Interactive Login) edge to the computer.
 		require.Nil(t, db.ReadTransaction(context.Background(), func(tx graph.Transaction) error {
-			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchCanRDPEntityBitmapForComputer(tx, harness.RDPHarnessWithCitrix.Computer.ID, groupExpansions, true, true)
+			rdpComputerData, err := canRDPData.FetchCanRDPComputerData(tx, harness.RDPHarnessWithCitrix.Computer.ID)
+			require.Nil(t, err)
+
+			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchCanRDPEntityBitmapForComputer(rdpComputerData, true, true)
 			require.Nil(t, err)
 
 			// We should expect the intersection of members of `Direct Access Users`, with entities that have the RIL privilege to the computer
@@ -171,6 +192,26 @@ func TestFetchRDPEntityBitmapForComputer(t *testing.T) {
 			return nil
 		}))
 
+		// When citrix is enabled but URA is not enforced, we should expect the cross product of Remote Desktop Users and Direct Access Users
+		require.Nil(t, db.ReadTransaction(context.Background(), func(tx graph.Transaction) error {
+			rdpComputerData, err := canRDPData.FetchCanRDPComputerData(tx, harness.RDPHarnessWithCitrix.Computer.ID)
+			require.Nil(t, err)
+
+			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchCanRDPEntityBitmapForComputer(rdpComputerData, false, true)
+			require.Nil(t, err)
+
+			require.Equalf(t, 5, int(rdpEnabledEntityIDBitmap.Cardinality()), "members %v", rdpEnabledEntityIDBitmap.Slice())
+
+			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDPHarnessWithCitrix.IrshadUser.ID.Uint64()))
+			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDPHarnessWithCitrix.UliUser.ID.Uint64()))
+			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDPHarnessWithCitrix.DomainGroupC.ID.Uint64()))
+			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDPHarnessWithCitrix.RohanUser.ID.Uint64()))
+
+			// This group does not have the RIL privilege, but should get a CanRDP edge
+			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDPHarnessWithCitrix.DomainGroupG.ID.Uint64()))
+			return nil
+		}))
+
 		// Create a RemoteInteractiveLogonRight relationship from the RDP local group to the computer to test our most common case
 		require.Nil(t, db.WriteTransaction(context.Background(), func(tx graph.Transaction) error {
 			_, err := tx.CreateRelationshipByIDs(harness.RDPHarnessWithCitrix.RDPLocalGroup.ID, harness.RDPHarnessWithCitrix.Computer.ID, ad.RemoteInteractiveLogonRight, graph.NewProperties())
@@ -178,20 +219,25 @@ func TestFetchRDPEntityBitmapForComputer(t *testing.T) {
 		}))
 
 		// Recalculate group expansions
-		groupExpansions, err = adAnalysis.ExpandAllRDPLocalGroups(context.Background(), db)
+		canRDPData, err = FetchCanRDPData(context.Background(), db)
 		require.Nil(t, err)
 
 		require.Nil(t, db.ReadTransaction(context.Background(), func(tx graph.Transaction) error {
-			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchCanRDPEntityBitmapForComputer(tx, harness.RDPHarnessWithCitrix.Computer.ID, groupExpansions, true, true)
+			rdpComputerData, err := canRDPData.FetchCanRDPComputerData(tx, harness.RDPHarnessWithCitrix.Computer.ID)
 			require.Nil(t, err)
 
-			// We should expect the intersection of members of `Direct Access Users,` with entities that are first degree members of the `Remote Desktop Users` group
-			require.Equal(t, 3, int(rdpEnabledEntityIDBitmap.Cardinality()))
+			rdpEnabledEntityIDBitmap, err := adAnalysis.FetchCanRDPEntityBitmapForComputer(rdpComputerData, true, true)
+			require.Nil(t, err)
+
+			// We should expect the cross product of members of `Direct Access Users,` `Remote Desktop Users`, and entities with RIL privileges to
+			// the computer
+			require.Equal(t, 5, int(rdpEnabledEntityIDBitmap.Cardinality()))
 
 			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDPHarnessWithCitrix.DomainGroupC.ID.Uint64()))
 			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDPHarnessWithCitrix.IrshadUser.ID.Uint64()))
 			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDPHarnessWithCitrix.UliUser.ID.Uint64()))
-
+			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDPHarnessWithCitrix.RohanUser.ID.Uint64()))
+			require.True(t, rdpEnabledEntityIDBitmap.Contains(harness.RDPHarnessWithCitrix.DomainGroupG.ID.Uint64()))
 			return nil
 		}))
 	})

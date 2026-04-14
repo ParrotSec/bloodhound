@@ -70,7 +70,7 @@ func setupIntegrationTestSuite(t *testing.T, fixturesPath string) IntegrationTes
 	gormDB, err := database.OpenDatabase(connConf.URL())
 	require.NoError(t, err)
 
-	db := database.NewBloodhoundDB(gormDB, auth.NewIdentityResolver())
+	db := database.NewBloodhoundDB(gormDB, auth.NewIdentityResolver(), config.Configuration{})
 
 	graphDB, err := dawgs.Open(ctx, pg.DriverName, dawgs.Config{
 		GraphQueryMemoryLimit: 1024 * 1024 * 1024 * 2,
@@ -79,13 +79,16 @@ func setupIntegrationTestSuite(t *testing.T, fixturesPath string) IntegrationTes
 	})
 	require.NoError(t, err)
 
-	err = migrations.NewGraphMigrator(graphDB).Migrate(ctx, graphschema.DefaultGraphSchema())
+	err = migrations.NewGraphMigrator(graphDB).Migrate(ctx)
 	require.NoError(t, err)
 
 	err = db.Migrate(ctx)
 	require.NoError(t, err)
 
 	err = graphDB.AssertSchema(ctx, graphschema.DefaultGraphSchema())
+	require.NoError(t, err)
+
+	err = db.PopulateExtensionData(ctx)
 	require.NoError(t, err)
 
 	ingestSchema, err := upload.LoadIngestSchema()

@@ -593,6 +593,7 @@ type RDPHarnessWithCitrix struct {
 	DomainGroupD           *graph.Node
 	DomainGroupE           *graph.Node
 	DomainGroupF           *graph.Node
+	DomainGroupG           *graph.Node
 	RDPLocalGroup          *graph.Node
 	DirectAccessUsersGroup *graph.Node
 	DomainUsersGroup       *graph.Node
@@ -632,6 +633,7 @@ func (s *RDPHarnessWithCitrix) Setup(testCtx *GraphTestContext) {
 	s.DomainGroupD = testCtx.NewActiveDirectoryGroup("Domain Group D", testCtx.Harness.RootADHarness.ActiveDirectoryDomainSID)
 	s.DomainGroupE = testCtx.NewActiveDirectoryGroup("Domain Group E", testCtx.Harness.RootADHarness.ActiveDirectoryDomainSID)
 	s.DomainGroupF = testCtx.NewActiveDirectoryGroup("Domain Group F", testCtx.Harness.RootADHarness.ActiveDirectoryDomainSID)
+	s.DomainGroupG = testCtx.NewActiveDirectoryGroup("Domain Group G", testCtx.Harness.RootADHarness.ActiveDirectoryDomainSID)
 
 	testCtx.NewRelationship(s.EliUser, s.RDPLocalGroup, ad.MemberOfLocalGroup, DefaultRelProperties)
 	testCtx.NewRelationship(s.EliUser, s.Computer, ad.RemoteInteractiveLogonRight, DefaultRelProperties)
@@ -672,6 +674,9 @@ func (s *RDPHarnessWithCitrix) Setup(testCtx *GraphTestContext) {
 	testCtx.NewRelationship(s.RDPLocalGroup, s.Computer, ad.LocalToComputer, DefaultRelProperties)
 
 	testCtx.NewRelationship(s.DirectAccessUsersGroup, s.Computer, ad.LocalToComputer, DefaultRelProperties)
+
+	testCtx.NewRelationship(s.DomainGroupG, s.RDPLocalGroup, ad.MemberOfLocalGroup, DefaultRelProperties)
+	testCtx.NewRelationship(s.DomainGroupG, s.DirectAccessUsersGroup, ad.MemberOfLocalGroup, DefaultRelProperties)
 
 	// add users to the DAU local group
 	testCtx.NewRelationship(s.UliUser, s.DirectAccessUsersGroup, ad.MemberOfLocalGroup, DefaultRelProperties)
@@ -9788,6 +9793,23 @@ func (s *IngestRelationships) Setup(graphTestContext *GraphTestContext) {
 	s.ExistingRel = graphTestContext.NewRelationship(s.Node1, s.Node2, graph.StringKind("existing_edge_kind"))
 }
 
+type IngestRelationshipsUppercaseInvariant struct {
+	Node1 *graph.Node
+	Node2 *graph.Node
+}
+
+func (s *IngestRelationshipsUppercaseInvariant) Setup(graphTestContext *GraphTestContext) {
+	s.Node1 = graphTestContext.NewNode(graph.AsProperties(graph.PropertyMap{
+		common.ObjectID: "ABC",
+		common.Name:     "computer a",
+	}), graph.StringKind("Computer"))
+
+	s.Node2 = graphTestContext.NewNode(graph.AsProperties(graph.PropertyMap{
+		common.ObjectID: "DEF",
+		common.Name:     "computer b",
+	}), graph.StringKind("Computer"))
+}
+
 type GenericIngest struct {
 	Node1 *graph.Node
 	Node2 *graph.Node
@@ -9876,6 +9898,23 @@ func (s *Version730_Migration_Harness) Setup(graphTestContext *GraphTestContext)
 	s.Computer2 = graphTestContext.NewActiveDirectoryComputer("Computer2", domain1Sid)
 	s.Computer2.Properties.Set(ad.SMBSigning.String(), false)
 	graphTestContext.UpdateNode(s.Computer1)
+}
+
+type Version900_Migration_Harness struct {
+	Computer1 *graph.Node
+	Computer2 *graph.Node
+}
+
+func (s *Version900_Migration_Harness) Setup(graphTestContext *GraphTestContext) {
+	domain1Sid := RandomDomainSID()
+
+	s.Computer1 = graphTestContext.NewActiveDirectoryComputer("Computer1", domain1Sid)
+	s.Computer1.Properties.Set("environment_id", "ENV-001")
+	graphTestContext.UpdateNode(s.Computer1)
+
+	s.Computer2 = graphTestContext.NewActiveDirectoryComputer("Computer2", domain1Sid)
+	s.Computer2.Properties.Set("environment_id", "ENV-001")
+	graphTestContext.UpdateNode(s.Computer2)
 }
 
 type ACLInheritanceHarness struct {
@@ -10210,7 +10249,9 @@ type HarnessDetails struct {
 	GenericIngest                                   GenericIngest
 	ResolveEndpointsByName                          ResolveEndpointsByName
 	IngestRelationships                             IngestRelationships
+	IngestRelationshipsUppercaseInvariant           IngestRelationshipsUppercaseInvariant
 	AZPIMRolesHarness                               AZPIMRolesHarness
 	Version730_Migration                            Version730_Migration_Harness
+	Version900_Migration_Harness                    Version900_Migration_Harness
 	ACLInheritanceHarness                           ACLInheritanceHarness
 }

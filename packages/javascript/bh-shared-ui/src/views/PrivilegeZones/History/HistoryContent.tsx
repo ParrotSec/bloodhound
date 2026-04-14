@@ -1,4 +1,4 @@
-// Copyright 2025 Specter Ops, Inc.
+// Copyright 2026 Specter Ops, Inc.
 //
 // Licensed under the Apache License, Version 2.0
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import { Card, CardHeader, CardTitle, DataTable } from '@bloodhoundenterprise/doodleui';
+import { Card, CardHeader, CardTitle, DataTable } from 'doodle-ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SearchInput } from '../../../components/SearchInput';
 import { measureElement } from '../utils';
@@ -83,33 +83,46 @@ const HistoryContent = () => {
     };
 
     return (
-        <div data-testid='history-wrapper' className='flex gap-8 mt-6 grow'>
-            <Card className='grow'>
-                <CardHeader className='flex-row ml-3 justify-between items-center'>
-                    <CardTitle>History Log</CardTitle>
-                    <div className='flex items-center '>
-                        <SearchInput value={search} onInputChange={setSearch} />
-                        <FilterDialog setFilters={setFilters} filters={filters} />
-                    </div>
-                </CardHeader>
+        <>
+            <p className='mt-6'>
+                The History Log provides a record of changes to your Zones and Labels, including the type of change that
+                occurred, who made it, and when it happened.
+                <br />
+                Use the log to audit and track changes to your Zones and Labels over time. Log items past 90 days are
+                cleared.
+            </p>
+            <div data-testid='history-wrapper' className='flex gap-6 mt-4 h-[calc(100%-5rem)]'>
+                <Card className='flex flex-col'>
+                    <CardHeader className='flex-row ml-3 justify-between items-center'>
+                        <CardTitle>History Log</CardTitle>
+                        <div className='flex items-center'>
+                            <SearchInput id='search-pz-history' value={search} onInputChange={setSearch} />
+                            <FilterDialog setFilters={setFilters} filters={filters} />
+                        </div>
+                    </CardHeader>
 
-                <div
-                    onScroll={(e) => fetchMoreOnBottomReached(e.currentTarget)}
-                    ref={scrollRef}
-                    className='overflow-y-auto h-[68dvh]'>
-                    <DataTable
-                        data={records}
-                        TableHeaderProps={tableHeaderProps}
-                        TableHeadProps={tableHeadProps}
-                        TableProps={tableProps}
-                        TableCellProps={tableCellProps}
-                        columns={columns}
-                        virtualizationOptions={virtualizationOptions}
-                    />
+                    <div
+                        onScroll={(e) => fetchMoreOnBottomReached(e.currentTarget)}
+                        ref={scrollRef}
+                        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+                        tabIndex={0}
+                        className='overflow-y-auto mb-1 min-h-32'>
+                        <DataTable
+                            data={records}
+                            TableHeaderProps={tableHeaderProps}
+                            TableHeadProps={tableHeadProps}
+                            TableProps={tableProps}
+                            TableCellProps={tableCellProps}
+                            columns={columns}
+                            virtualizationOptions={virtualizationOptions}
+                        />
+                    </div>
+                </Card>
+                <div className='w-[400px] min-w-[400px] overflow-y-auto mb-1'>
+                    <HistoryNote />
                 </div>
-            </Card>
-            <HistoryNote />
-        </div>
+            </div>
+        </>
     );
 };
 

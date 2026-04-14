@@ -22,8 +22,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/specterops/dawgs/graph"
-
 	"github.com/specterops/bloodhound/cmd/api/src/api"
 	"github.com/specterops/bloodhound/cmd/api/src/api/registration"
 	"github.com/specterops/bloodhound/cmd/api/src/api/router"
@@ -37,11 +35,16 @@ import (
 	"github.com/specterops/bloodhound/cmd/api/src/daemons/datapipe"
 	"github.com/specterops/bloodhound/cmd/api/src/daemons/gc"
 	"github.com/specterops/bloodhound/cmd/api/src/database"
+	"github.com/specterops/bloodhound/cmd/api/src/migrations"
 	"github.com/specterops/bloodhound/cmd/api/src/model/appcfg"
 	"github.com/specterops/bloodhound/cmd/api/src/queries"
+	"github.com/specterops/bloodhound/cmd/api/src/services/dogtags"
+	"github.com/specterops/bloodhound/cmd/api/src/services/opengraphschema"
 	"github.com/specterops/bloodhound/cmd/api/src/services/upload"
+	"github.com/specterops/bloodhound/packages/go/bhlog/attr"
 	"github.com/specterops/bloodhound/packages/go/cache"
 	schema "github.com/specterops/bloodhound/packages/go/graphschema"
+	"github.com/specterops/dawgs/graph"
 )
 
 // ConnectPostgres initializes a connection to PG, and returns errors if any
@@ -49,7 +52,7 @@ func ConnectPostgres(cfg config.Configuration) (*database.BloodhoundDB, error) {
 	if db, err := database.OpenDatabase(cfg.Database.PostgreSQLConnectionString()); err != nil {
 		return nil, fmt.Errorf("error while attempting to create database connection: %w", err)
 	} else {
-		return database.NewBloodhoundDB(db, auth.NewIdentityResolver()), nil
+		return database.NewBloodhoundDB(db, auth.NewIdentityResolver(), cfg), nil
 	}
 }
 
@@ -77,11 +80,25 @@ func PreMigrationDaemons(ctx context.Context, cfg config.Configuration, connecti
 }
 
 func Entrypoint(ctx context.Context, cfg config.Configuration, connections bootstrap.DatabaseConnections[*database.BloodhoundDB, *graph.DatabaseSwitch]) ([]daemons.Daemon, error) {
+
+	dogtagsService := dogtags.NewDefaultService()
+
+	slog.InfoContext(ctx, "DogTags provider initialized",
+		slog.String("namespace", "dogtags"),
+		slog.String("provider", dogtagsService.ProviderName()))
+
+	flags := dogtagsService.GetAllDogTags()
+	slog.InfoContext(ctx, "DogTags Configuration",
+		slog.String("namespace", "dogtags"),
+		slog.Any("flags", flags))
+
 	if !cfg.DisableMigrations {
-		if err := bootstrap.MigrateDB(ctx, cfg, connections.RDMS); err != nil {
+		if err := bootstrap.MigrateDB(ctx, cfg, connections.RDMS, config.NewDefaultAdminConfiguration); err != nil {
 			return nil, fmt.Errorf("rdms migration error: %w", err)
-		} else if err := bootstrap.MigrateGraph(ctx, connections.Graph, schema.DefaultGraphSchema()); err != nil {
+		} else if err := migrations.NewGraphMigrator(connections.Graph).Migrate(ctx); err != nil {
 			return nil, fmt.Errorf("graph migration error: %w", err)
+		} else if err := bootstrap.PopulateExtensionData(ctx, connections.RDMS); err != nil {
+			return nil, fmt.Errorf("extensions data population error: %w", err)
 		}
 	} else if err := connections.Graph.SetDefaultGraph(ctx, schema.DefaultGraph()); err != nil {
 		return nil, fmt.Errorf("no default graph found but migrations are disabled per configuration: %w", err)
@@ -92,8 +109,16 @@ func Entrypoint(ctx context.Context, cfg config.Configuration, connections boots
 	// Allow recreating the default admin account to help with lockouts/loading database dumps
 	if cfg.RecreateDefaultAdmin {
 		slog.InfoContext(ctx, "Recreating default admin user")
-		if err := bootstrap.CreateDefaultAdmin(ctx, cfg, connections.RDMS); err != nil {
+		if err := bootstrap.CreateDefaultAdmin(ctx, cfg, connections.RDMS, config.NewDefaultAdminConfiguration); err != nil {
 			return nil, err
+		}
+	}
+
+	// Remove authentication tokens if the APITokens parameter is disabled
+	if !appcfg.GetAPITokensParameter(ctx, connections.RDMS) {
+		slog.WarnContext(ctx, "APITokens parameter is disabled")
+		if dErr := connections.RDMS.DeleteAllAuthTokens(ctx); dErr != nil {
+			return nil, fmt.Errorf("failed to delete all auth tokens at startup: %w", dErr)
 		}
 	}
 
@@ -109,18 +134,18 @@ func Entrypoint(ctx context.Context, cfg config.Configuration, connections boots
 		startDelay := 0 * time.Second
 
 		var (
-			cl             = changelog.NewChangelog(connections.Graph, connections.RDMS, changelog.DefaultOptions())
-			pipeline       = datapipe.NewPipeline(ctx, cfg, connections.RDMS, connections.Graph, graphQueryCache, ingestSchema, cl)
-			graphQuery     = queries.NewGraphQuery(connections.Graph, graphQueryCache, cfg)
-			authorizer     = auth.NewAuthorizer(connections.RDMS)
-			datapipeDaemon = datapipe.NewDaemon(pipeline, startDelay, time.Duration(cfg.DatapipeInterval)*time.Second, connections.RDMS)
-			routerInst     = router.NewRouter(cfg, authorizer, fmt.Sprintf(bootstrap.ContentSecurityPolicy, "", ""))
-			ctxInitializer = database.NewContextInitializer(connections.RDMS)
-			authenticator  = api.NewAuthenticator(cfg, connections.RDMS, ctxInitializer)
+			cl                     = changelog.NewChangelog(connections.Graph, connections.RDMS, changelog.DefaultOptions())
+			pipeline               = datapipe.NewPipeline(ctx, cfg, connections.RDMS, connections.Graph, graphQueryCache, ingestSchema, cl)
+			graphQuery             = queries.NewGraphQuery(connections.Graph, graphQueryCache, cfg)
+			authorizer             = auth.NewAuthorizer(connections.RDMS)
+			datapipeDaemon         = datapipe.NewDaemon(pipeline, startDelay, time.Duration(cfg.DatapipeInterval)*time.Second, connections.RDMS)
+			routerInst             = router.NewRouter(cfg, authorizer, fmt.Sprintf(bootstrap.ContentSecurityPolicy, "", "", "", "", "", ""))
+			authenticator          = api.NewAuthenticator(cfg, connections.RDMS, api.NewAuthExtensions(cfg, connections.RDMS))
+			openGraphSchemaService = opengraphschema.NewOpenGraphSchemaService(connections.RDMS, connections.Graph)
 		)
 
-		registration.RegisterFossGlobalMiddleware(&routerInst, cfg, auth.NewIdentityResolver(), authenticator)
-		registration.RegisterFossRoutes(&routerInst, cfg, connections.RDMS, connections.Graph, graphQuery, apiCache, collectorManifests, authenticator, authorizer, ingestSchema)
+		registration.RegisterFossGlobalMiddleware(&routerInst, cfg, auth.NewIdentityResolver(), authenticator, connections.RDMS)
+		registration.RegisterFossRoutes(&routerInst, cfg, connections.RDMS, connections.Graph, graphQuery, apiCache, collectorManifests, authenticator, authorizer, ingestSchema, dogtagsService, openGraphSchemaService)
 
 		// Set neo4j batch and flush sizes
 		neo4jParameters := appcfg.GetNeo4jParameters(ctx, connections.RDMS)
@@ -129,7 +154,7 @@ func Entrypoint(ctx context.Context, cfg config.Configuration, connections boots
 
 		// Trigger analysis on first start
 		if err := connections.RDMS.RequestAnalysis(ctx, "init"); err != nil {
-			slog.WarnContext(ctx, fmt.Sprintf("failed to request init analysis: %v", err))
+			slog.WarnContext(ctx, "Failed to request init analysis", attr.Error(err))
 		}
 
 		return []daemons.Daemon{
