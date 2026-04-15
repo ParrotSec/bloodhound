@@ -1,3 +1,9 @@
+bloodhound (9.0.0-0parrot2) echo; urgency=medium
+
+  * Fix missing npm dependency
+
+ -- Lorenzo "Palinuro" Faletra <palinuro@parrotsec.org>  Wed, 15 Apr 2026 13:14:16 +0200
+
 bloodhound (9.0.0-0parrot1) echo; urgency=medium
 
   * disable pristine-tar branch

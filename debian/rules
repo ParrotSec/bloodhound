@@ -5,7 +5,7 @@ include /usr/share/dpkg/pkg-info.mk
 # output every command that modifies files on the build system.
 export DH_VERBOSE = 1
 export HOME=$(CURDIR)/debian/fakehome
-export SB_VERSION=$(DEB_VERSION_UPSTREAM)
+export SB_VERSION=$(shell echo $(DEB_VERSION_UPSTREAM) | sed 's/~/-/')
 export SB_YARN_CMD=yarnpkg
 export DH_GOLANG_BUILDPKG=github.com/specterops/bloodhound
 
@@ -25,7 +25,6 @@ override_dh_auto_build:
 execute_after_dh_install:
 	rm -rf $(CURDIR)/debian/bloodhound/usr/share/gocode
 	rm -rf $(CURDIR)/debian/bloodhound/usr/lib/bloodhound/cmd/ui/node_modules
-	rm $(CURDIR)/debian/bloodhound/usr/lib/bloodhound/cmd/ui/.eslintrc.cjs
 
 override_dh_auto_test:
 

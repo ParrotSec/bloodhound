@@ -9,6 +9,7 @@ Build-Depends:
  dh-golang,
  golang-any,
  yarnpkg,
+ npm,
 Standards-Version: 4.6.2
 Homepage: https://github.com/SpecterOps/BloodHound
 Vcs-Git: https://gitlab.com/kalilinux/packages/bloodhound.git
